@@ -1,0 +1,103 @@
+{
+  "general": [
+    {
+      "id": "main",
+      "name": "مجلد المنهج والمواد الرئيسي",
+      "category": "عام",
+      "icon": "📁",
+      "path": "C:\\IT_Materials",
+      "description": "المجلد الأساسي الذي يحتوي على كافة ملفات ومجلدات المادة التعليمية"
+    },
+    {
+      "id": "books",
+      "name": "مجلد الكتب والمناهج الدراسية",
+      "category": "PDF",
+      "icon": "📕",
+      "path": "C:\\IT_Materials\\الكتب",
+      "description": "كتب الطالب، أدلة المعلم، والكتب الإثرائية بصيغة PDF"
+    },
+    {
+      "id": "exams",
+      "name": "مجلد الاختبارات وبنوك الأسئلة",
+      "category": "Word",
+      "icon": "📝",
+      "path": "C:\\IT_Materials\\الاختبارات",
+      "description": "نماذج الاختبارات الفترية والنهائية وبنوك الأسئلة بصيغة DOCX"
+    },
+    {
+      "id": "grades",
+      "name": "مجلد سجلات وكشوف درجات الطلاب",
+      "category": "Excel",
+      "icon": "📊",
+      "path": "C:\\IT_Materials\\سجلات الدرجات",
+      "description": "سجلات رصد الدرجات اليومية والفترية وكشوف الرصد بصيغة XLSX"
+    },
+    {
+      "id": "interactive",
+      "name": "مجلد الأنشطة التفاعلية والبرمجيات",
+      "category": "HTML",
+      "icon": "🌐",
+      "path": "C:\\IT_Materials\\الأنشطة التفاعلية",
+      "description": "الأنشطة التفاعلية ومحاكاة الشبكات والتطبيقات التعليمية"
+    },
+    {
+      "id": "worksheets",
+      "name": "مجلد أوراق العمل والأنشطة",
+      "category": "عام",
+      "icon": "📄",
+      "path": "C:\\IT_Materials\\أوراق العمل",
+      "description": "أوراق العمل الإثرائية والعلاجية للدروس المختلفة"
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec_g6_a",
+      "grade": "الصف السادس",
+      "section": "شعبة أ",
+      "path": "C:\\IT_Materials\\الصف السادس\\شعبة أ"
+    },
+    {
+      "id": "sec_g6_b",
+      "grade": "الصف السادس",
+      "section": "شعبة ب",
+      "path": "C:\\IT_Materials\\الصف السادس\\شعبة ب"
+    },
+    {
+      "id": "sec_g6_c",
+      "grade": "الصف السادس",
+      "section": "شعبة ج",
+      "path": "C:\\IT_Materials\\الصف السادس\\شعبة ج"
+    },
+    {
+      "id": "sec_g7_a",
+      "grade": "الصف السابع",
+      "section": "شعبة أ",
+      "path": "C:\\IT_Materials\\الصف السابع\\شعبة أ"
+    },
+    {
+      "id": "sec_g7_b",
+      "grade": "الصف السابع",
+      "section": "شعبة ب",
+      "path": "C:\\IT_Materials\\الصف السابع\\شعبة ب"
+    },
+    {
+      "id": "sec_g9_a",
+      "grade": "الصف التاسع",
+      "section": "شعبة أ",
+      "path": "C:\\IT_Materials\\الصف التاسع\\شعبة أ"
+    },
+    {
+      "id": "sec_g9_b",
+      "grade": "الصف التاسع",
+      "section": "شعبة ب",
+      "path": "C:\\IT_Materials\\الصف التاسع\\شعبة ب"
+    },
+    {
+      "id": "sec_g9_c",
+      "grade": "الصف التاسع",
+      "section": "شعبة ج",
+      "path": "C:\\IT_Materials\\الصف التاسع\\شعبة ج"
+    }
+  ],
+  "custom": []
+}

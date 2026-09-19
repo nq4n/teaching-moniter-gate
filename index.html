@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>متابعة مادة تقنية المعلومات</title>
+
+<style>
+
+:root{
+    --bg:#0f172a;
+    --sidebar:#111827;
+    --card:#1e293b;
+    --card2:#243447;
+    --primary:#3b82f6;
+    --success:#22c55e;
+    --danger:#ef4444;
+    --warning:#f59e0b;
+    --text:#f8fafc;
+    --muted:#94a3b8;
+    --border:#334155;
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Segoe UI,Tahoma,sans-serif;
+}
+
+body{
+    background:var(--bg);
+    color:var(--text);
+    height:100vh;
+    overflow:hidden;
+}
+
+.app{
+    display:flex;
+    height:100vh;
+}
+
+/* Sidebar */
+
+.sidebar{
+    width:300px;
+    background:var(--sidebar);
+    border-left:1px solid var(--border);
+    overflow:auto;
+    padding:20px;
+}
+
+.logo{
+    font-size:22px;
+    font-weight:bold;
+    margin-bottom:20px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.add-controls{
+    display:flex;
+    gap:8px;
+    margin-bottom:20px;
+}
+
+.btn{
+    border:none;
+    background:var(--primary);
+    color:white;
+    padding:10px 14px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:.2s;
+    font-size:14px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+}
+
+.btn:hover{
+    opacity:.9;
+}
+
+.btn-secondary{
+    background:#334155;
+    color:white;
+}
+
+.btn-success{
+    background:var(--success);
+    color:white;
+}
+
+.grade{
+    margin-bottom:20px;
+}
+
+.grade-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+}
+
+.grade-title{
+    color:#60a5fa;
+    font-weight:bold;
+}
+
+.small-btn{
+    border:none;
+    background:#334155;
+    color:white;
+    border-radius:8px;
+    padding:6px 8px;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.small-btn:hover{
+    background:#475569;
+}
+
+.section{
+    background:var(--card);
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:8px;
+    cursor:pointer;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    transition:.2s;
+}
+
+.section:hover{
+    background:var(--card2);
+}
+
+.section.active{
+    border:2px solid var(--primary);
+    background:var(--card2);
+}
+
+/* Main */
+
+.main{
+    flex:1;
+    padding:25px;
+    overflow:auto;
+}
+
+.topbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+    flex-wrap:wrap;
+    gap:15px;
+}
+
+.page-title{
+    font-size:28px;
+    font-weight:bold;
+}
+
+.subtitle{
+    color:var(--muted);
+    margin-top:5px;
+}
+
+.topbar-actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+}
+
+.tabs{
+    display:flex;
+    gap:10px;
+    margin-bottom:25px;
+}
+
+.tab{
+    background:var(--card);
+    border:none;
+    color:white;
+    padding:12px 20px;
+    border-radius:12px;
+    cursor:pointer;
+    font-size:15px;
+    font-weight:500;
+    transition:.2s;
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.tab.active{
+    background:var(--primary);
+}
+
+/* Dashboard / Stats */
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:15px;
+    margin-bottom:20px;
+}
+
+.stat-card{
+    background:var(--card);
+    border-radius:18px;
+    padding:20px;
+    border:1px solid var(--border);
+}
+
+.stat-title{
+    color:var(--muted);
+    font-size:14px;
+}
+
+.stat-value{
+    margin-top:10px;
+    font-size:30px;
+    font-weight:bold;
+}
+
+.progress-card{
+    background:var(--card);
+    border-radius:18px;
+    padding:20px;
+    margin-bottom:20px;
+    border:1px solid var(--border);
+}
+
+.progress-top{
+    display:flex;
+    justify-content:space-between;
+    margin-bottom:15px;
+}
+
+.progress-bar{
+    width:100%;
+    height:16px;
+    background:#334155;
+    border-radius:50px;
+    overflow:hidden;
+}
+
+.progress-fill{
+    height:100%;
+    width:0%;
+    background:linear-gradient(
+        90deg,
+        #22c55e,
+        #4ade80
+    );
+    transition:.4s;
+}
+
+/* Lessons */
+
+.lessons{
+    display:block;
+}
+
+.lesson-card{
+    background:var(--card);
+    margin-bottom:10px;
+    border-radius:14px;
+    padding:15px;
+    border:1px solid var(--border);
+}
+
+.lesson-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.lesson-title{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    font-size:16px;
+}
+
+.lesson-actions{
+    display:flex;
+    gap:8px;
+}
+
+input[type="checkbox"]{
+    width:20px;
+    height:20px;
+    accent-color:var(--success);
+    cursor:pointer;
+}
+
+/* Files */
+
+.files{
+    display:none;
+}
+
+.filters{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:20px;
+}
+
+.filter{
+    border:none;
+    background:var(--card);
+    color:white;
+    padding:10px 16px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.filter.active{
+    background:var(--primary);
+}
+
+.files-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+    gap:20px;
+}
+
+.file-card{
+    background:var(--card);
+    border-radius:18px;
+    padding:20px;
+    border:1px solid var(--border);
+    transition:.2s;
+}
+
+.file-card:hover{
+    transform:translateY(-4px);
+    border-color:#475569;
+}
+
+.file-icon{
+    width:70px;
+    height:70px;
+    border-radius:16px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:32px;
+    margin-bottom:15px;
+}
+
+.pdf{
+    background:rgba(239,68,68,.15);
+}
+
+.word{
+    background:rgba(59,130,246,.15);
+}
+
+.excel{
+    background:rgba(34,197,94,.15);
+}
+
+.html{
+    background:rgba(168,85,247,.15);
+}
+
+.file-type{
+    color:var(--muted);
+    margin-top:6px;
+    margin-bottom:15px;
+    font-size:13px;
+}
+
+.file-footer{
+    display:flex;
+    gap:8px;
+    margin-top:15px;
+}
+
+.open-btn{
+    flex:1;
+    background:var(--primary);
+    border:none;
+    color:white;
+    padding:10px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.open-btn:hover{
+    background:#2563eb;
+}
+
+.folder-btn{
+    background:#334155;
+    border:none;
+    color:white;
+    padding:10px 12px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:.2s;
+    display:flex;
+    align-items:center;
+    gap:4px;
+    font-size:13px;
+}
+
+.folder-btn:hover{
+    background:#475569;
+}
+
+.more-btn{
+    background:#334155;
+    border:none;
+    color:white;
+    width:45px;
+    border-radius:10px;
+    cursor:pointer;
+}
+
+/* ========================================================
+   FOLDERS MANAGEMENT TAB STYLES
+   ======================================================== */
+
+.folders{
+    display:none;
+}
+
+.folders-header{
+    background:var(--card);
+    border-radius:18px;
+    padding:22px;
+    margin-bottom:20px;
+    border:1px solid var(--border);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:16px;
+}
+
+.folders-header-info h2{
+    font-size:22px;
+    margin-bottom:6px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.folders-header-info p{
+    color:var(--muted);
+    font-size:14px;
+}
+
+.folders-header-actions{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+}
+
+.config-badge{
+    background:rgba(59,130,246,0.15);
+    color:#60a5fa;
+    border:1px solid rgba(59,130,246,0.3);
+    padding:8px 14px;
+    border-radius:10px;
+    font-size:13px;
+    font-family:Consolas, monospace;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+}
+
+.folder-filter-bar{
+    display:flex;
+    gap:10px;
+    margin-bottom:20px;
+    flex-wrap:wrap;
+}
+
+.folder-filter-btn{
+    background:var(--card);
+    border:1px solid var(--border);
+    color:var(--muted);
+    padding:9px 18px;
+    border-radius:12px;
+    cursor:pointer;
+    transition:.2s;
+    font-size:14px;
+    font-weight:500;
+}
+
+.folder-filter-btn:hover{
+    color:white;
+    border-color:#475569;
+}
+
+.folder-filter-btn.active{
+    background:var(--primary);
+    color:white;
+    border-color:var(--primary);
+}
+
+.folders-list{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+}
+
+.folder-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:18px 22px;
+    transition:border-color .2s;
+}
+
+.folder-card:hover{
+    border-color:#475569;
+}
+
+.folder-card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:12px;
+    flex-wrap:wrap;
+    gap:10px;
+}
+
+.folder-card-title-group{
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+.folder-card-icon{
+    font-size:24px;
+    width:42px;
+    height:42px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(255,255,255,0.06);
+    border-radius:12px;
+}
+
+.folder-card-name{
+    font-size:16px;
+    font-weight:600;
+    color:#f1f5f9;
+}
+
+.folder-card-desc{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:3px;
+}
+
+.folder-card-badges{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.badge{
+    padding:5px 12px;
+    border-radius:20px;
+    font-size:12px;
+    font-weight:500;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+}
+
+.badge-success{
+    background:rgba(34,197,94,0.15);
+    color:#4ade80;
+    border:1px solid rgba(34,197,94,0.3);
+}
+
+.badge-warning{
+    background:rgba(245,158,11,0.15);
+    color:#fbbf24;
+    border:1px solid rgba(245,158,11,0.3);
+}
+
+.badge-tag{
+    background:#334155;
+    color:#cbd5e1;
+}
+
+.folder-path-row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin-top:10px;
+    flex-wrap:wrap;
+}
+
+.folder-input-wrapper{
+    flex:1;
+    min-width:280px;
+}
+
+.folder-input{
+    width:100%;
+    background:#0b1329;
+    border:1px solid var(--border);
+    color:#e2e8f0;
+    padding:11px 14px;
+    border-radius:10px;
+    font-family:Consolas, 'Courier New', monospace;
+    font-size:13.5px;
+    direction:ltr;
+    text-align:left;
+    transition:border-color .2s, box-shadow .2s;
+}
+
+.folder-input:focus{
+    outline:none;
+    border-color:var(--primary);
+    box-shadow:0 0 0 2px rgba(59,130,246,0.25);
+}
+
+.btn-browse{
+    background:#2563eb;
+    color:white;
+    border:none;
+    padding:11px 16px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:13.5px;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    white-space:nowrap;
+    transition:.2s;
+}
+
+.btn-browse:hover{
+    background:#1d4ed8;
+}
+
+.btn-open{
+    background:#1e293b;
+    border:1px solid var(--border);
+    color:#93c5fd;
+    padding:11px 14px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:13.5px;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    white-space:nowrap;
+    transition:.2s;
+}
+
+.btn-open:hover{
+    background:#334155;
+    color:white;
+}
+
+.btn-create{
+    background:rgba(245,158,11,0.2);
+    border:1px solid rgba(245,158,11,0.4);
+    color:#fbbf24;
+    padding:6px 12px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:12px;
+    transition:.2s;
+}
+
+.btn-create:hover{
+    background:rgba(245,158,11,0.35);
+}
+
+.btn-delete{
+    background:rgba(239,68,68,0.15);
+    border:1px solid rgba(239,68,68,0.3);
+    color:#f87171;
+    padding:11px 14px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:13.5px;
+    transition:.2s;
+}
+
+.btn-delete:hover{
+    background:rgba(239,68,68,0.25);
+}
+
+/* Toast Notifications */
+.toast-container{
+    position:fixed;
+    bottom:24px;
+    left:24px;
+    z-index:9999;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    pointer-events:none;
+}
+
+.toast{
+    background:#1e293b;
+    color:white;
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:14px 20px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.5);
+    font-size:14px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    animation:toastSlideIn .3s ease forwards;
+    pointer-events:auto;
+}
+
+.toast-success{
+    border-right:4px solid var(--success);
+}
+
+.toast-error{
+    border-right:4px solid var(--danger);
+}
+
+.toast-info{
+    border-right:4px solid var(--primary);
+}
+
+@keyframes toastSlideIn{
+    from{
+        opacity:0;
+        transform:translateY(20px);
+    }
+    to{
+        opacity:1;
+        transform:translateY(0);
+    }
+}
+
+/* Modal */
+.modal-overlay{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100vw;
+    height:100vh;
+    background:rgba(0,0,0,0.7);
+    display:none;
+    justify-content:center;
+    align-items:center;
+    z-index:9000;
+    backdrop-filter:blur(4px);
+}
+
+.modal{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:25px;
+    width:90%;
+    max-width:540px;
+}
+
+.modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+}
+
+.modal-header h3{
+    font-size:18px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.modal-close{
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-size:22px;
+    cursor:pointer;
+}
+
+.modal-body{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+}
+
+.form-group{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+}
+
+.form-group label{
+    font-size:13px;
+    color:var(--muted);
+}
+
+.form-control{
+    background:#0b1329;
+    border:1px solid var(--border);
+    color:white;
+    padding:11px 14px;
+    border-radius:10px;
+    font-size:14px;
+}
+
+.form-control:focus{
+    outline:none;
+    border-color:var(--primary);
+}
+
+.modal-footer{
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    margin-top:22px;
+}
+
+/* Mobile */
+
+@media(max-width:900px){
+
+    .app{
+        flex-direction:column;
+    }
+
+    .sidebar{
+        width:100%;
+        height:auto;
+        max-height:300px;
+    }
+
+    .topbar{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:12px;
+    }
+
+    .folder-path-row{
+        flex-direction:column;
+        align-items:stretch;
+    }
+}
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+    <aside class="sidebar">
+
+        <div class="logo">
+            <span>📚</span>
+            <span>مادة تقنية المعلومات</span>
+        </div>
+
+        <div class="add-controls">
+            <button class="btn">➕ صف</button>
+            <button class="btn">➕ شعبة</button>
+        </div>
+
+        <div class="grade">
+
+            <div class="grade-header">
+                <span class="grade-title">الصف السادس</span>
+                <button class="small-btn">✏️</button>
+            </div>
+
+            <div class="section active" onclick="selectSection('الصف السادس', 'شعبة أ', this)">شعبة أ</div>
+            <div class="section" onclick="selectSection('الصف السادس', 'شعبة ب', this)">شعبة ب</div>
+            <div class="section" onclick="selectSection('الصف السادس', 'شعبة ج', this)">شعبة ج</div>
+
+        </div>
+
+        <div class="grade">
+
+            <div class="grade-header">
+                <span class="grade-title">الصف السابع</span>
+                <button class="small-btn">✏️</button>
+            </div>
+
+            <div class="section" onclick="selectSection('الصف السابع', 'شعبة أ', this)">شعبة أ</div>
+            <div class="section" onclick="selectSection('الصف السابع', 'شعبة ب', this)">شعبة ب</div>
+
+        </div>
+
+        <div class="grade">
+
+            <div class="grade-header">
+                <span class="grade-title">الصف التاسع</span>
+                <button class="small-btn">✏️</button>
+            </div>
+
+            <div class="section" onclick="selectSection('الصف التاسع', 'شعبة أ', this)">شعبة أ</div>
+            <div class="section" onclick="selectSection('الصف التاسع', 'شعبة ب', this)">شعبة ب</div>
+            <div class="section" onclick="selectSection('الصف التاسع', 'شعبة ج', this)">شعبة ج</div>
+
+        </div>
+
+    </aside>
+
+    <main class="main">
+
+        <div class="topbar">
+
+            <div>
+                <div class="page-title" id="pageTitle">
+                    الصف السادس - شعبة أ
+                </div>
+
+                <div class="subtitle">
+                    متابعة التقدم والملفات التعليمية وإدارة المسارات
+                </div>
+            </div>
+
+            <div class="topbar-actions">
+                <button class="btn" onclick="showTab('folders')">📁 إدارة المجلدات</button>
+                <button class="btn btn-secondary">➕ إضافة درس</button>
+                <button class="btn btn-secondary">➕ إضافة ملف</button>
+            </div>
+
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="lessons" onclick="showTab('lessons')">📖 الدروس</button>
+            <button class="tab" data-tab="files" onclick="showTab('files')">📂 الملفات</button>
+            <button class="tab" data-tab="folders" onclick="showTab('folders')">📁 مسارات المجلدات</button>
+        </div>
+
+        <!-- Lessons Stats and Progress (visible when in lessons) -->
+        <div id="lessonsStatsWrapper">
+            <div class="stats">
+
+                <div class="stat-card">
+                    <div class="stat-title">إجمالي الدروس</div>
+                    <div class="stat-value" id="totalLessons">5</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-title">المنجز</div>
+                    <div class="stat-value" id="doneLessons">0</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-title">نسبة الإنجاز</div>
+                    <div class="stat-value" id="percentage">0%</div>
+                </div>
+
+            </div>
+
+            <div class="progress-card">
+
+                <div class="progress-top">
+                    <span>تقدم المنهج</span>
+                    <span id="percentText">0%</span>
+                </div>
+
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Folders Stats (visible when in folders) -->
+        <div id="foldersStatsWrapper" style="display:none;">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-title">إجمالي المجلدات المعرفة</div>
+                    <div class="stat-value" id="totalFoldersCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">المجلدات الموجودة على القرص</div>
+                    <div class="stat-value" id="existingFoldersCount" style="color:var(--success);">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">ملف التكوين المنفصل</div>
+                    <div class="stat-value" style="font-size:20px; font-family:Consolas, monospace; color:#60a5fa;">folders.json</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lessons Tab Content -->
+
+        <section id="lessons" class="lessons">
+
+            <div class="lesson-card">
+                <div class="lesson-row">
+                    <div class="lesson-title">
+                        <input class="lesson-check" type="checkbox">
+                        <span>مقدمة في الحاسب الآلي</span>
+                    </div>
+                    <div class="lesson-actions">
+                        <button class="small-btn">✏️</button>
+                        <button class="small-btn">🗑️</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lesson-card">
+                <div class="lesson-row">
+                    <div class="lesson-title">
+                        <input class="lesson-check" type="checkbox">
+                        <span>المكونات المادية</span>
+                    </div>
+                    <div class="lesson-actions">
+                        <button class="small-btn">✏️</button>
+                        <button class="small-btn">🗑️</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lesson-card">
+                <div class="lesson-row">
+                    <div class="lesson-title">
+                        <input class="lesson-check" type="checkbox">
+                        <span>وحدات الإدخال والإخراج</span>
+                    </div>
+                    <div class="lesson-actions">
+                        <button class="small-btn">✏️</button>
+                        <button class="small-btn">🗑️</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lesson-card">
+                <div class="lesson-row">
+                    <div class="lesson-title">
+                        <input class="lesson-check" type="checkbox">
+                        <span>أنظمة التشغيل</span>
+                    </div>
+                    <div class="lesson-actions">
+                        <button class="small-btn">✏️</button>
+                        <button class="small-btn">🗑️</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lesson-card">
+                <div class="lesson-row">
+                    <div class="lesson-title">
+                        <input class="lesson-check" type="checkbox">
+                        <span>الشبكات والإنترنت</span>
+                    </div>
+                    <div class="lesson-actions">
+                        <button class="small-btn">✏️</button>
+                        <button class="small-btn">🗑️</button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Files Tab Content -->
+
+        <section id="files" class="files">
+
+            <div class="filters">
+                <button class="filter active">الكل</button>
+                <button class="filter">PDF</button>
+                <button class="filter">Word</button>
+                <button class="filter">Excel</button>
+                <button class="filter">HTML</button>
+            </div>
+
+            <div class="files-grid">
+
+                <div class="file-card">
+
+                    <div class="file-icon pdf">📕</div>
+
+                    <h3>كتاب المنهج</h3>
+
+                    <div class="file-type">PDF</div>
+
+                    <div class="file-footer">
+                        <button class="open-btn" onclick="openCategoryFolder('books')">فتح المجلد</button>
+                        <button class="folder-btn" title="تعديل مسار مجلد الكتب" onclick="showTab('folders'); filterFolders('general');">⚙️ المسار</button>
+                    </div>
+
+                </div>
+
+                <div class="file-card">
+
+                    <div class="file-icon word">📝</div>
+
+                    <h3>اختبار الوحدة الأولى</h3>
+
+                    <div class="file-type">DOCX</div>
+
+                    <div class="file-footer">
+                        <button class="open-btn" onclick="openCategoryFolder('exams')">فتح المجلد</button>
+                        <button class="folder-btn" title="تعديل مسار مجلد الاختبارات" onclick="showTab('folders'); filterFolders('general');">⚙️ المسار</button>
+                    </div>
+
+                </div>
+
+                <div class="file-card">
+
+                    <div class="file-icon excel">📊</div>
+
+                    <h3>درجات الطلاب</h3>
+
+                    <div class="file-type">XLSX</div>
+
+                    <div class="file-footer">
+                        <button class="open-btn" onclick="openCategoryFolder('grades')">فتح المجلد</button>
+                        <button class="folder-btn" title="تعديل مسار مجلد السجلات" onclick="showTab('folders'); filterFolders('general');">⚙️ المسار</button>
+                    </div>
+
+                </div>
+
+                <div class="file-card">
+
+                    <div class="file-icon html">🌐</div>
+
+                    <h3>نشاط تفاعلي</h3>
+
+                    <div class="file-type">HTML</div>
+
+                    <div class="file-footer">
+                        <button class="open-btn" onclick="openCategoryFolder('interactive')">فتح المجلد</button>
+                        <button class="folder-btn" title="تعديل مسار مجلد الأنشطة" onclick="showTab('folders'); filterFolders('general');">⚙️ المسار</button>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- Folders Management Tab Content -->
+
+        <section id="folders" class="folders">
+
+            <div class="folders-header">
+                <div class="folders-header-info">
+                    <h2>
+                        <span>📁</span>
+                        <span>إدارة مسارات المجلدات في النظام</span>
+                    </h2>
+                    <p>تحديد وتعديل مسارات المجلدات على جهازك. تُحفظ التغييرات تلقائياً وبشكل دائم في ملف <strong>folders.json</strong> المنفصل.</p>
+                </div>
+
+                <div class="folders-header-actions">
+                    <div class="config-badge" title="ملف الإعدادات المنفصل للمجلدات">
+                        📄 folders.json
+                    </div>
+                    <button class="btn btn-secondary" onclick="openAddFolderModal()">➕ مجلد مخصص</button>
+                    <button class="btn btn-success" onclick="saveAllFolders(true)">💾 حفظ جميع التغييرات</button>
+                </div>
+            </div>
+
+            <div class="folder-filter-bar">
+                <button class="folder-filter-btn active" onclick="filterFolders('all', this)">عرض الكل</button>
+                <button class="folder-filter-btn" onclick="filterFolders('general', this)">مجلدات التصنيفات والمواد</button>
+                <button class="folder-filter-btn" onclick="filterFolders('sections', this)">مجلدات الصفوف والشعب</button>
+                <button class="folder-filter-btn" onclick="filterFolders('custom', this)">مجلدات مخصصة</button>
+            </div>
+
+            <div id="foldersList" class="folders-list">
+                <!-- Dynamically rendered folder cards -->
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+<!-- Modal for adding custom folder -->
+<div class="modal-overlay" id="addFolderModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><span>➕</span> إضافة مجلد جديد مخصص</h3>
+            <button class="modal-close" onclick="closeAddFolderModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>اسم المجلد / الوصف</label>
+                <input type="text" id="newFolderName" class="form-control" placeholder="مثال: مجلد ملخصات الوحدة الثانية">
+            </div>
+            <div class="form-group">
+                <label>التصنيف أو التسمية</label>
+                <input type="text" id="newFolderCategory" class="form-control" placeholder="مثال: ملخصات / عام / نشاط">
+            </div>
+            <div class="form-group">
+                <label>مسار المجلد على جهازك</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="newFolderPath" class="form-control" style="flex:1; direction:ltr; font-family:Consolas, monospace;" placeholder="C:\Path\To\Folder">
+                    <button type="button" class="btn-browse" onclick="browseForNewFolder()">استعراض...</button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddFolderModal()">إلغاء</button>
+            <button class="btn btn-success" onclick="saveNewCustomFolder()">إضافة وحفظ</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast notifications container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+
+// Global State
+let foldersData = {
+    general: [],
+    sections: [],
+    custom: []
+};
+let currentFolderFilter = 'all';
+let currentSelectedGrade = 'الصف السادس';
+let currentSelectedSection = 'شعبة أ';
+
+// PyWebView API Helper
+function getApi() {
+    return (window.pywebview && window.pywebview.api) ? window.pywebview.api : null;
+}
+
+// Toast notification helper
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    let icon = '✅';
+    if (type === 'error') icon = '❌';
+    if (type === 'info') icon = 'ℹ️';
+
+    toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(15px)';
+        toast.style.transition = '.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+// Tab navigation
+function showTab(tabName) {
+    document.getElementById("lessons").style.display = "none";
+    document.getElementById("files").style.display = "none";
+    document.getElementById("folders").style.display = "none";
+
+    const lessonsStats = document.getElementById("lessonsStatsWrapper");
+    const foldersStats = document.getElementById("foldersStatsWrapper");
+
+    if (tabName === "lessons") {
+        lessonsStats.style.display = "block";
+        foldersStats.style.display = "none";
+    } else if (tabName === "folders") {
+        lessonsStats.style.display = "none";
+        foldersStats.style.display = "block";
+        updateFoldersStats();
+    } else {
+        lessonsStats.style.display = "none";
+        foldersStats.style.display = "none";
+    }
+
+    const target = document.getElementById(tabName);
+    if (target) {
+        target.style.display = "block";
+    }
+
+    document.querySelectorAll(".tab").forEach(t => {
+        t.classList.remove("active");
+    });
+
+    const activeBtn = document.querySelector(`.tab[data-tab="${tabName}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add("active");
+    }
+}
+
+// Filter folder categories in Folders tab
+function filterFolders(filter, btn) {
+    currentFolderFilter = filter;
+    if (btn) {
+        document.querySelectorAll('.folder-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+    renderFoldersList();
+}
+
+// Sidebar section selection
+function selectSection(grade, section, elem) {
+    currentSelectedGrade = grade;
+    currentSelectedSection = section;
+
+    document.querySelectorAll('.sidebar .section').forEach(s => s.classList.remove('active'));
+    if (elem) elem.classList.add('active');
+
+    const titleElem = document.getElementById('pageTitle');
+    if (titleElem) {
+        titleElem.textContent = `${grade} - ${section}`;
+    }
+
+    // If currently in folders view, highlight the relevant section folder
+    if (currentFolderFilter === 'sections' || currentFolderFilter === 'all') {
+        renderFoldersList();
+    }
+}
+
+// Calculate progress for lessons
+function calculateProgress() {
+    const checks = document.querySelectorAll(".lesson-check");
+    const total = checks.length;
+    let done = 0;
+
+    checks.forEach(c => {
+        if (c.checked) done++;
+    });
+
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+    document.getElementById("doneLessons").textContent = done;
+    document.getElementById("totalLessons").textContent = total;
+    document.getElementById("percentage").textContent = percent + "%";
+    document.getElementById("percentText").textContent = percent + "%";
+    document.getElementById("progressFill").style.width = percent + "%";
+}
+
+document.querySelectorAll(".lesson-check").forEach(cb => {
+    cb.addEventListener("change", calculateProgress);
+});
+calculateProgress();
+
+// ========================================================
+// FOLDERS CONFIGURATION & MANAGEMENT LOGIC
+// ========================================================
+
+// Load folders from backend (folders.json)
+async function loadFoldersData() {
+    const api = getApi();
+    if (api && api.load_folders) {
+        try {
+            const data = await api.load_folders();
+            if (data) {
+                foldersData = data;
+            }
+        } catch (e) {
+            console.error("Error loading folders from API:", e);
+        }
+    } else {
+        // Fallback to localStorage for browser testing
+        const stored = localStorage.getItem('folders_config');
+        if (stored) {
+            try {
+                foldersData = JSON.parse(stored);
+            } catch (e) {}
+        }
+    }
+
+    // Ensure array structures
+    if (!Array.isArray(foldersData.general)) foldersData.general = [];
+    if (!Array.isArray(foldersData.sections)) foldersData.sections = [];
+    if (!Array.isArray(foldersData.custom)) foldersData.custom = [];
+
+    // Check directory status
+    await checkAllFoldersExistence();
+    renderFoldersList();
+    updateFoldersStats();
+}
+
+// Check folder existence on disk for all items
+async function checkAllFoldersExistence() {
+    const api = getApi();
+    if (!api || !api.check_folder_exists) return;
+
+    const checkItem = async (item) => {
+        if (item.path) {
+            try {
+                item.exists = await api.check_folder_exists(item.path);
+            } catch (e) {
+                item.exists = false;
+            }
+        } else {
+            item.exists = false;
+        }
+    };
+
+    const promises = [];
+    foldersData.general.forEach(item => promises.push(checkItem(item)));
+    foldersData.sections.forEach(item => promises.push(checkItem(item)));
+    foldersData.custom.forEach(item => promises.push(checkItem(item)));
+
+    await Promise.all(promises);
+}
+
+// Update folders stats counters
+function updateFoldersStats() {
+    const total = (foldersData.general?.length || 0) + 
+                  (foldersData.sections?.length || 0) + 
+                  (foldersData.custom?.length || 0);
+    
+    let existing = 0;
+    const countExisting = list => (list || []).forEach(item => { if (item.exists) existing++; });
+    countExisting(foldersData.general);
+    countExisting(foldersData.sections);
+    countExisting(foldersData.custom);
+
+    const totalElem = document.getElementById('totalFoldersCount');
+    const existingElem = document.getElementById('existingFoldersCount');
+
+    if (totalElem) totalElem.textContent = total;
+    if (existingElem) existingElem.textContent = existing;
+}
+
+// Save folders to folders.json
+async function saveAllFolders(showNotification = true) {
+    const api = getApi();
+    if (api && api.save_folders) {
+        try {
+            const res = await api.save_folders(foldersData);
+            if (res && res.success) {
+                if (showNotification) showToast("تم حفظ مسارات المجلدات في ملف folders.json بنجاح!");
+            } else {
+                if (showNotification) showToast(res?.error || "فشل حفظ ملف folders.json", "error");
+            }
+        } catch (e) {
+            if (showNotification) showToast("خطأ أثناء الحفظ: " + e.message, "error");
+        }
+    } else {
+        localStorage.setItem('folders_config', JSON.stringify(foldersData));
+        if (showNotification) showToast("تم الحفظ محلياً (وضع المتصفح)");
+    }
+    await checkAllFoldersExistence();
+    updateFoldersStats();
+    renderFoldersList();
+}
+
+// Render the folder cards based on current filter
+function renderFoldersList() {
+    const container = document.getElementById('foldersList');
+    if (!container) return;
+
+    let itemsToRender = [];
+
+    if (currentFolderFilter === 'all' || currentFolderFilter === 'general') {
+        (foldersData.general || []).forEach(item => {
+            itemsToRender.push({ ...item, type: 'general' });
+        });
+    }
+
+    if (currentFolderFilter === 'all' || currentFolderFilter === 'sections') {
+        (foldersData.sections || []).forEach(item => {
+            itemsToRender.push({
+                id: item.id,
+                name: `${item.grade} - ${item.section}`,
+                category: item.grade,
+                icon: '🏫',
+                path: item.path,
+                description: `مجلد الملفات والأنشطة الخاص بـ (${item.grade} - ${item.section})`,
+                exists: item.exists,
+                type: 'section',
+                grade: item.grade,
+                section: item.section
+            });
+        });
+    }
+
+    if (currentFolderFilter === 'all' || currentFolderFilter === 'custom') {
+        (foldersData.custom || []).forEach(item => {
+            itemsToRender.push({ ...item, type: 'custom' });
+        });
+    }
+
+    if (itemsToRender.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center; padding:40px; color:var(--muted); background:var(--card); border-radius:16px;">
+                <div style="font-size:36px; margin-bottom:10px;">📂</div>
+                <div>لا توجد مجلدات في هذا التصنيف حالياً.</div>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    itemsToRender.forEach(item => {
+        const isCurrentSection = item.type === 'section' && 
+                                item.grade === currentSelectedGrade && 
+                                item.section === currentSelectedSection;
+
+        const borderStyle = isCurrentSection ? 'border: 2px solid var(--primary);' : '';
+
+        const statusBadge = item.exists ? 
+            `<span class="badge badge-success">🟢 موجود على القرص</span>` :
+            `<span class="badge badge-warning">🟡 غير موجود</span>
+             <button class="btn-create" onclick="createFolderOnDisk('${escapeQuotes(item.id)}', '${item.type}')">➕ إنشاء المجلد</button>`;
+
+        html += `
+            <div class="folder-card" style="${borderStyle}">
+                <div class="folder-card-top">
+                    <div class="folder-card-title-group">
+                        <div class="folder-card-icon">${item.icon || '📁'}</div>
+                        <div>
+                            <div class="folder-card-name">
+                                ${escapeHtml(item.name)}
+                                ${isCurrentSection ? '<span class="badge" style="background:#2563eb; color:white; margin-right:6px;">الشعبة الحالية</span>' : ''}
+                            </div>
+                            <div class="folder-card-desc">${escapeHtml(item.description || '')}</div>
+                        </div>
+                    </div>
+                    <div class="folder-card-badges">
+                        <span class="badge badge-tag">${escapeHtml(item.category || 'عام')}</span>
+                        ${statusBadge}
+                        ${item.type === 'custom' ? `<button class="btn-delete" title="حذف المجلد المخصص" onclick="deleteCustomFolder('${escapeQuotes(item.id)}')">🗑️ حذف</button>` : ''}
+                    </div>
+                </div>
+
+                <div class="folder-path-row">
+                    <div class="folder-input-wrapper">
+                        <input type="text" 
+                               class="folder-input" 
+                               value="${escapeHtml(item.path || '')}" 
+                               placeholder="حدد مسار المجلد على جهازك..."
+                               onchange="updateFolderPath('${escapeQuotes(item.id)}', '${item.type}', this.value)"
+                               onblur="updateFolderPath('${escapeQuotes(item.id)}', '${item.type}', this.value)">
+                    </div>
+                    <button class="btn-browse" onclick="browseFolderFor('${escapeQuotes(item.id)}', '${item.type}')">
+                        📁 استعراض...
+                    </button>
+                    <button class="btn-open" onclick="openFolderOnDisk('${escapeQuotes(item.path)}')">
+                        ↗️ فتح المجلد
+                    </button>
+                    <button class="small-btn" title="نسخ المسار" onclick="copyPathToClipboard('${escapeQuotes(item.path)}')">
+                        📋
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+// Escape helpers for safe HTML and attribute insertion
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function escapeQuotes(str) {
+    if (!str) return '';
+    return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+
+// Update path in data model when user edits input
+function updateFolderPath(id, type, newPath) {
+    let target = null;
+    if (type === 'general') {
+        target = foldersData.general.find(i => i.id === id);
+    } else if (type === 'section') {
+        target = foldersData.sections.find(i => i.id === id);
+    } else if (type === 'custom') {
+        target = foldersData.custom.find(i => i.id === id);
+    }
+
+    if (target && target.path !== newPath) {
+        target.path = newPath.trim();
+        saveAllFolders(false);
+    }
+}
+
+// Browse for folder using native Windows dialog via PyWebView
+async function browseFolderFor(id, type) {
+    let target = null;
+    if (type === 'general') {
+        target = foldersData.general.find(i => i.id === id);
+    } else if (type === 'section') {
+        target = foldersData.sections.find(i => i.id === id);
+    } else if (type === 'custom') {
+        target = foldersData.custom.find(i => i.id === id);
+    }
+
+    if (!target) return;
+
+    const api = getApi();
+    if (api && api.select_folder) {
+        try {
+            const res = await api.select_folder(target.path || "");
+            if (res && res.success && res.path) {
+                target.path = res.path;
+                showToast(`تم تحديد المسار: ${res.path}`);
+                await saveAllFolders(true);
+            }
+        } catch (e) {
+            showToast("حدث خطأ أثناء فتح نافذة الاختيار: " + e.message, "error");
+        }
+    } else {
+        const manual = prompt("أدخل مسار المجلد الجديد:", target.path || "");
+        if (manual !== null) {
+            target.path = manual.trim();
+            saveAllFolders(true);
+        }
+    }
+}
+
+// Open folder in Windows File Explorer
+async function openFolderOnDisk(path) {
+    if (!path) {
+        showToast("يرجى تحديد مسار المجلد أولاً", "error");
+        return;
+    }
+    const api = getApi();
+    if (api && api.open_folder) {
+        try {
+            const res = await api.open_folder(path);
+            if (res && res.success) {
+                showToast("تم فتح المجلد في مستكشف ويندوز");
+            } else {
+                showToast(res?.error || "المجلد غير موجود على هذا المسار", "error");
+            }
+        } catch (e) {
+            showToast("خطأ أثناء فتح المجلد: " + e.message, "error");
+        }
+    } else {
+        showToast("فتح المجلد مدعوم عند تشغيل التطبيق عبر بايثون (Desktop App)", "info");
+    }
+}
+
+// Create folder on disk if it does not exist
+async function createFolderOnDisk(id, type) {
+    let target = null;
+    if (type === 'general') {
+        target = foldersData.general.find(i => i.id === id);
+    } else if (type === 'section') {
+        target = foldersData.sections.find(i => i.id === id);
+    } else if (type === 'custom') {
+        target = foldersData.custom.find(i => i.id === id);
+    }
+
+    if (!target || !target.path) {
+        showToast("المسار غير محدد", "error");
+        return;
+    }
+
+    const api = getApi();
+    if (api && api.create_folder) {
+        try {
+            const res = await api.create_folder(target.path);
+            if (res && res.success) {
+                showToast("تم إنشاء المجلد بنجاح على القرص!");
+                await checkAllFoldersExistence();
+                updateFoldersStats();
+                renderFoldersList();
+            } else {
+                showToast(res?.error || "تعذر إنشاء المجلد", "error");
+            }
+        } catch (e) {
+            showToast("خطأ: " + e.message, "error");
+        }
+    } else {
+        showToast("إنشاء المجلدات مدعوم عبر واجهة سطح المكتب", "info");
+    }
+}
+
+// Copy path to clipboard
+function copyPathToClipboard(path) {
+    if (!path) return;
+    navigator.clipboard.writeText(path).then(() => {
+        showToast("تم نسخ المسار إلى الحافظة!");
+    }).catch(() => {
+        showToast("تعذر النسخ", "error");
+    });
+}
+
+// Open folder associated with a category from the Files tab
+function openCategoryFolder(categoryId) {
+    const folder = (foldersData.general || []).find(f => f.id === categoryId);
+    if (folder && folder.path) {
+        openFolderOnDisk(folder.path);
+    } else {
+        showToast("لم يتم تحديد مسار لهذا المجلد بعد. انتقل إلى تبويب المجلدات لتحديده.", "info");
+        showTab('folders');
+    }
+}
+
+// Modal handling for Custom Folder
+function openAddFolderModal() {
+    document.getElementById('newFolderName').value = '';
+    document.getElementById('newFolderCategory').value = '';
+    document.getElementById('newFolderPath').value = '';
+    document.getElementById('addFolderModal').style.display = 'flex';
+}
+
+function closeAddFolderModal() {
+    document.getElementById('addFolderModal').style.display = 'none';
+}
+
+async function browseForNewFolder() {
+    const api = getApi();
+    if (api && api.select_folder) {
+        try {
+            const res = await api.select_folder("");
+            if (res && res.success && res.path) {
+                document.getElementById('newFolderPath').value = res.path;
+            }
+        } catch (e) {}
+    }
+}
+
+async function saveNewCustomFolder() {
+    const name = document.getElementById('newFolderName').value.trim();
+    const category = document.getElementById('newFolderCategory').value.trim() || 'مخصص';
+    const path = document.getElementById('newFolderPath').value.trim();
+
+    if (!name) {
+        showToast("يرجى كتابة اسم المجلد", "error");
+        return;
+    }
+
+    const newId = 'custom_' + Date.now();
+    foldersData.custom.push({
+        id: newId,
+        name: name,
+        category: category,
+        icon: '📁',
+        path: path,
+        description: `مجلد مخصص: ${name}`
+    });
+
+    closeAddFolderModal();
+    await saveAllFolders(true);
+    showToast("تمت إضافة المجلد المخصص وحفظه في folders.json!");
+}
+
+async function deleteCustomFolder(id) {
+    if (!confirm("هل أنت متأكد من رغبتك في إزالة هذا المجلد من القائمة؟")) return;
+    foldersData.custom = foldersData.custom.filter(item => item.id !== id);
+    await saveAllFolders(true);
+    showToast("تم حذف المجلد من القائمة");
+}
+
+// Close modal on outside click
+window.addEventListener('click', (e) => {
+    const modal = document.getElementById('addFolderModal');
+    if (e.target === modal) {
+        closeAddFolderModal();
+    }
+});
+
+// App Initialization
+async function initApp() {
+    await loadFoldersData();
+}
+
+// PyWebView ready event listener
+window.addEventListener('pywebviewready', async () => {
+    await initApp();
+});
+
+// Fallback DOM load
+document.addEventListener('DOMContentLoaded', async () => {
+    setTimeout(async () => {
+        if (!foldersData.general || foldersData.general.length === 0) {
+            await initApp();
+        }
+    }, 150);
+});
+
+</script>
+
+</body>
+</html>

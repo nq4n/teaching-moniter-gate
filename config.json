@@ -1,0 +1,21 @@
+{
+  "lessons": [
+    { "id": 1, "title": "مقدمة في الحاسب الآلي", "completed": false },
+    { "id": 2, "title": "المكونات المادية", "completed": false },
+    { "id": 3, "title": "وحدات الإدخال والإخراج", "completed": false },
+    { "id": 4, "title": "أنظمة التشغيل", "completed": false },
+    { "id": 5, "title": "الشبكات والإنترنت", "completed": false }
+  ],
+  "files": [
+    { "id": 1, "name": "كتاب المنهج", "type": "PDF", "status": "unused", "icon": "📕" },
+    { "id": 2, "name": "اختبار الوحدة الأولى", "type": "DOCX", "status": "unused", "icon": "📝" },
+    { "id": 3, "name": "درجات الطلاب", "type": "XLSX", "status": "unused", "icon": "📊" },
+    { "id": 4, "name": "نشاط تفاعلي", "type": "HTML", "status": "unused", "icon": "🌐" }
+  ],
+  "currentGrade": "الصف السادس",
+  "currentSheba": "شعبة أ",
+  "settings": {
+    "theme": "dark",
+    "language": "ar"
+  }
+}
