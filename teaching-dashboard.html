@@ -1,0 +1,578 @@
+<title>Teaching Monitor Dashboard</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root {
+  --bg-primary: #0a0e27;
+  --bg-secondary: #121829;
+  --bg-tertiary: #1a2238;
+  --bg-card: #161f30;
+  --fg-primary: #f0f4ff;
+  --fg-secondary: #a8b4d4;
+  --accent-1: #00d4ff;
+  --accent-2: #7c3aed;
+  --accent-3: #10b981;
+  --border-color: #2a3147;
+  --sidebar-width: 300px;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+
+:root[data-theme="dark"] { color-scheme: dark; }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-primary);
+  color: var(--fg-primary);
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  direction: rtl;
+  text-align: right;
+}
+
+header {
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, rgba(18, 24, 41, 0.8) 100%);
+  border-bottom: 1px solid var(--border-color);
+  padding: 1.5rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  direction: rtl;
+  backdrop-filter: blur(10px);
+}
+
+.header-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-user {
+  font-size: 0.9rem;
+  color: var(--fg-secondary);
+  font-weight: 500;
+}
+
+.main-container {
+  display: grid;
+  grid-template-columns: 1fr var(--sidebar-width);
+  gap: 0;
+  height: 100%;
+}
+
+.sidebar {
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.sidebar-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.sidebar-btn {
+  padding: 0.9rem 1.2rem;
+  border: none;
+  border-radius: 0.875rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  transition: all 0.3s ease;
+  direction: rtl;
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-btn.machine {
+  background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+  color: white;
+}
+
+.sidebar-btn.machine:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.4);
+}
+
+.sidebar-btn.edit {
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(26, 34, 56, 0.5) 100%);
+  color: var(--fg-primary);
+  border: 1.5px solid var(--border-color);
+}
+
+.sidebar-btn.edit:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-1);
+  transform: translateY(-3px);
+}
+
+.sidebar-section-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 1rem;
+  margin-top: 1.75rem;
+  position: relative;
+  padding-right: 0.5rem;
+}
+
+.sidebar-section-title::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  width: 3px;
+  height: 12px;
+  background: linear-gradient(180deg, var(--accent-1), var(--accent-2));
+  border-radius: 2px;
+}
+
+.grades-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.grade-item {
+  padding: 0.85rem 1rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(26, 34, 56, 0.4) 100%);
+  border: 1.5px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+  direction: rtl;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.grade-item:hover {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.08) 0%, rgba(124, 58, 237, 0.05) 100%);
+  border-color: var(--accent-2);
+  transform: translateX(4px);
+}
+
+.grade-item.active {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(124, 58, 237, 0.15) 100%);
+  border-color: var(--accent-1);
+  font-weight: 700;
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.2);
+  color: var(--accent-1);
+}
+
+.content {
+  overflow-y: auto;
+  padding: 2rem;
+  background: linear-gradient(180deg, var(--bg-primary) 0%, rgba(10, 14, 39, 0.8) 100%);
+}
+
+.breadcrumb {
+  display: flex;
+  gap: 0.7rem;
+  margin-bottom: 2.5rem;
+  font-size: 0.9rem;
+  color: var(--fg-secondary);
+  direction: rtl;
+  flex-direction: row-reverse;
+  font-weight: 500;
+}
+
+.breadcrumb-active {
+  color: var(--accent-1);
+  font-weight: 700;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(26, 34, 56, 0.5) 100%);
+  border: 1px solid var(--border-color);
+  padding: 2rem;
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-card:hover {
+  border-color: var(--accent-1);
+  box-shadow: 0 8px 32px rgba(0, 212, 255, 0.15);
+  transform: translateY(-4px);
+}
+
+.stat-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-label {
+  font-size: 0.95rem;
+  color: var(--fg-secondary);
+  font-weight: 600;
+}
+
+.explore-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.explore-level {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.level-column {
+  flex: 0 0 auto;
+  min-width: 250px;
+}
+
+.level-label {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--fg-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 1.25rem;
+  display: block;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2), transparent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.level-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.level-item {
+  padding: 1.25rem;
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(26, 34, 56, 0.4) 100%);
+  border: 1.5px solid var(--border-color);
+  border-radius: 0.875rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+}
+
+.level-item:hover {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.08) 0%, rgba(124, 58, 237, 0.05) 100%);
+  border-color: var(--accent-1);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.2);
+}
+
+.level-item.active {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(124, 58, 237, 0.1) 100%);
+  border-color: var(--accent-1);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.25);
+}
+
+.item-title {
+  font-weight: 700;
+  color: var(--fg-primary);
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.item-meta {
+  font-size: 0.8rem;
+  color: var(--fg-secondary);
+  display: flex;
+  gap: 0.8rem;
+  direction: rtl;
+  flex-direction: row-reverse;
+  font-weight: 500;
+}
+
+.item-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.1) 100%);
+  color: var(--accent-3);
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+@media (max-width: 1024px) {
+  .main-container { grid-template-columns: 1fr; }
+  .sidebar { border-left: none; border-bottom: 1px solid var(--border-color); flex-direction: row; }
+  .level-column { min-width: 180px; }
+}
+
+@media (max-width: 640px) {
+  .explore-level { gap: 1rem; }
+  .level-column { min-width: 150px; }
+  .content { padding: 1rem; }
+}
+</style>
+
+<header>
+  <div class="header-user">👤 المدرس: <span id="username-display">جاري التحميل...</span></div>
+  <div class="header-title">📚 Teaching Monitor</div>
+</header>
+
+<div class="main-container">
+  <div class="content">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-grades">-</div>
+        <div class="stat-label">عدد الصفوف</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-students">-</div>
+        <div class="stat-label">عدد الطلاب</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-records">-</div>
+        <div class="stat-label">عدد الدرجات</div>
+      </div>
+    </div>
+
+    <div class="breadcrumb">
+      <span class="breadcrumb-active" id="breadcrumb-current">اختر صفًا</span>
+    </div>
+
+    <div class="explore-view">
+      <div class="explore-level">
+        <div class="level-column">
+          <span class="level-label">📊 الصفوف</span>
+          <div class="level-items" id="explore-grades"></div>
+        </div>
+
+        <div class="level-column">
+          <span class="level-label">📝 الاختبارات</span>
+          <div class="level-items" id="explore-tests"></div>
+        </div>
+
+        <div class="level-column">
+          <span class="level-label">📈 الإحصائيات</span>
+          <div class="level-items" id="explore-stats"></div>
+        </div>
+      </div>
+
+      <div class="explore-level">
+        <div class="level-column">
+          <span class="level-label">👥 قائمة الطلاب</span>
+          <div class="level-items" id="explore-students"></div>
+        </div>
+
+        <div class="level-column">
+          <span class="level-label">📋 تفاصيل الطالب</span>
+          <div class="level-items" id="explore-student-detail">
+            <div class="level-item">
+              <div class="item-title">لا يوجد اختيار</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-buttons">
+      <button class="sidebar-btn machine" onclick="openMachineMode()">
+        <span>⚡</span>
+        <span>إضافة دفعية</span>
+      </button>
+      <button class="sidebar-btn edit" onclick="openEditMode()">
+        <span>✏️</span>
+        <span>تحرير يدوي</span>
+      </button>
+    </div>
+
+    <div class="sidebar-section-title">الصفوف المتاحة</div>
+    <div class="grades-list" id="grades-list"></div>
+
+    <div class="sidebar-section-title">أدوات سريعة</div>
+    <div class="grades-list">
+      <div class="grade-item" onclick="exportData()">📥 تصدير</div>
+      <div class="grade-item" onclick="showSettings()">⚙️ الإعدادات</div>
+      <div class="grade-item" onclick="logout()">🚪 تسجيل الخروج</div>
+    </div>
+  </aside>
+</div>
+
+<script>
+let currentGrade = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('username-display').textContent = "{{ username }}";
+  loadStats();
+  loadGrades();
+});
+
+async function loadStats() {
+  try {
+    const res = await fetch('/api/dashboard/overview');
+    const stats = await res.json();
+    document.getElementById('stat-grades').textContent = stats.total_grades;
+    document.getElementById('stat-students').textContent = stats.total_students;
+    document.getElementById('stat-records').textContent = stats.total_records;
+  } catch (e) { console.error('Error:', e); }
+}
+
+async function loadGrades() {
+  try {
+    const res = await fetch('/api/dashboard/grades');
+    const grades = await res.json();
+
+    const list = document.getElementById('grades-list');
+    const explore = document.getElementById('explore-grades');
+    list.innerHTML = explore.innerHTML = '';
+
+    if (grades.length === 0) {
+      list.innerHTML = '<div class="grade-item">لا يوجد صفوف</div>';
+      explore.innerHTML = '<div class="level-item"><div class="item-title">لا يوجد صفوف</div></div>';
+      return;
+    }
+
+    grades.forEach((grade, idx) => {
+      const sideItem = document.createElement('div');
+      sideItem.className = `grade-item ${idx === 0 ? 'active' : ''}`;
+      sideItem.textContent = grade.name;
+      sideItem.onclick = function() { selectGrade(grade.id, grade.name, this); };
+      list.appendChild(sideItem);
+
+      const exploreItem = document.createElement('div');
+      exploreItem.className = `level-item ${idx === 0 ? 'active' : ''}`;
+      exploreItem.innerHTML = `
+        <div class="item-title">${grade.name}</div>
+        <div class="item-meta"><span>${grade.students} طالب</span></div>
+      `;
+      exploreItem.onclick = function() { selectGrade(grade.id, grade.name, this); };
+      explore.appendChild(exploreItem);
+    });
+
+    selectGrade(grades[0].id, grades[0].name, document.querySelector('#explore-grades .level-item'));
+  } catch (e) { console.error('Error:', e); }
+}
+
+async function selectGrade(id, name, element) {
+  currentGrade = id;
+  document.querySelectorAll('#grades-list .grade-item, #explore-grades .level-item').forEach(el => {
+    el.classList.remove('active');
+  });
+  if (element) element.classList.add('active');
+  document.getElementById('breadcrumb-current').textContent = name;
+  await loadTests(id);
+  await loadStudents(id);
+}
+
+async function loadTests(gradeId) {
+  try {
+    const res = await fetch(`/api/dashboard/grade/${gradeId}/tests`);
+    const tests = await res.json();
+    const container = document.getElementById('explore-tests');
+    container.innerHTML = '';
+
+    if (tests.length === 0) {
+      container.innerHTML = '<div class="level-item"><div class="item-title">لا توجد اختبارات</div></div>';
+      document.getElementById('explore-stats').innerHTML = '<div class="level-item"><div class="item-title">-</div></div>';
+      return;
+    }
+
+    tests.forEach(test => {
+      const item = document.createElement('div');
+      item.className = 'level-item';
+      item.innerHTML = `
+        <div class="item-title">${test.name}</div>
+        <div class="item-meta"><span class="item-badge">متوسط</span><span>${test.average.toFixed(1)}%</span></div>
+      `;
+      container.appendChild(item);
+    });
+
+    const allAvg = tests.reduce((sum, t) => sum + t.average, 0) / tests.length;
+    document.getElementById('explore-stats').innerHTML = `
+      <div class="level-item">
+        <div class="item-title">المتوسط العام</div>
+        <div class="item-meta"><span style="font-size: 1.25rem; font-weight: 700; color: var(--accent-3);">${allAvg.toFixed(1)}%</span></div>
+      </div>
+    `;
+  } catch (e) { console.error('Error:', e); }
+}
+
+async function loadStudents(gradeId) {
+  try {
+    const res = await fetch(`/api/dashboard/grade/${gradeId}/students`);
+    const students = await res.json();
+    const container = document.getElementById('explore-students');
+    container.innerHTML = '';
+
+    if (students.length === 0) {
+      container.innerHTML = '<div class="level-item"><div class="item-title">لا يوجد طلاب</div></div>';
+      return;
+    }
+
+    students.forEach(student => {
+      const item = document.createElement('div');
+      item.className = 'level-item';
+      item.innerHTML = `
+        <div class="item-title">${student.name}</div>
+        <div class="item-meta"><span>#${student.student_id}</span><span>${student.average}%</span></div>
+      `;
+      item.onclick = () => showStudent(student);
+      container.appendChild(item);
+    });
+  } catch (e) { console.error('Error:', e); }
+}
+
+function showStudent(student) {
+  document.getElementById('explore-student-detail').innerHTML = `
+    <div class="level-item">
+      <div class="item-title">${student.name}</div>
+      <div class="item-meta"><span>الرقم: ${student.student_id}</span><span>${student.section}</span></div>
+    </div>
+    <div class="level-item">
+      <div class="item-title">المتوسط</div>
+      <div class="item-meta"><span style="font-size: 1.25rem; font-weight: 700; color: var(--accent-1);">${student.average}%</span></div>
+    </div>
+  `;
+}
+
+function openMachineMode() { alert('🤖 إضافة دفعية'); }
+function openEditMode() { alert('✏️ تحرير يدوي'); }
+function exportData() { alert('📥 تم التصدير'); }
+function showSettings() { alert('⚙️ الإعدادات'); }
+function logout() { if (confirm('تسجيل الخروج؟')) window.location.href = '/logout'; }
+</script>
