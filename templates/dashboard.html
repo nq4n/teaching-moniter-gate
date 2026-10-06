@@ -3,494 +3,329 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>متابعة الدرجات</title>
+<title>لوحة التحليلات — منار</title>
 <style>
-:root{
-    --bg:#0f172a;
-    --sidebar:#111827;
-    --card:#1e293b;
-    --card2:#243447;
-    --primary:#3b82f6;
-    --success:#22c55e;
-    --danger:#ef4444;
-    --warning:#f59e0b;
-    --text:#f8fafc;
-    --muted:#94a3b8;
-    --border:#334155;
-}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.app{display:flex;flex-wrap:wrap;min-height:100vh}
 
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-    font-family:Segoe UI,Tahoma,sans-serif;
-}
+/* sidebar */
+.side{width:252px;flex:0 0 252px;background:#15171E;color:#C7CCD6;padding:24px 18px;display:flex;flex-direction:column;gap:28px}
+.brand{display:flex;align-items:center;gap:11px;padding:0 6px}
+.brand .mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(140deg,#2D5BFF,#7A5AF8);display:flex;align-items:center;justify-content:center;flex:0 0 34px}
+.brand .name{font-weight:700;color:#fff;font-size:17px}
+.brand .sub{font-size:11px;color:#8A93A3}
+.navlabel{font-size:11px;color:#6B7486;padding:0 10px;margin-bottom:8px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav button,.nav a{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-size:14px;font-weight:500;color:#AEB5C2;background:none;border:none;font-family:inherit;cursor:pointer;width:100%;text-align:start}
+.nav button:hover,.nav a:hover{background:#20232D;color:#fff}
+.nav button.on{background:#262A36;color:#fff}
+.nav svg{width:17px;height:17px;flex:0 0 17px;stroke-width:1.9}
+.side .foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#20232D}
+.side .foot .av{width:34px;height:34px;border-radius:50%;background:#394052;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:0 0 34px}
+.side .foot .nm{font-size:13px;color:#fff;font-weight:600}
+.side .foot .rl{font-size:11px;color:#8A93A3}
+.side .foot a{margin-inline-start:auto;color:#8A93A3;display:flex}
+.side .foot a:hover{color:#fff}
 
-body{
-    background:var(--bg);
-    color:var(--text);
-    height:100vh;
-    overflow:hidden;
-}
+/* main */
+.main{flex:999 1 620px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:22px 34px;border-bottom:1px solid #E6E8EE}
+.top h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.01em}
+.top .crumb{font-size:12.5px;color:#646D7E;margin-bottom:3px}
+.top .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;border-radius:10px;border:1px solid #E6E8EE;background:#fff;font-size:13px;font-weight:500;color:#3A4150;cursor:pointer}
+.chip svg{width:15px;height:15px;stroke-width:1.9}
+.chip.privacy{background:#E2F5F2;border-color:#CDEBE6;color:#0C7266}
+.btn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 15px;border-radius:10px;background:#2D5BFF;color:#fff;font-size:13px;font-weight:600;border:none;cursor:pointer}
+.btn:hover{background:#2348cf}
+.btn svg{width:15px;height:15px;stroke-width:2}
+.body{padding:26px 34px 40px;display:flex;flex-direction:column;gap:22px}
 
-.app{
-    display:flex;
-    height:100vh;
-}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.kpi{background:#fff;border:1px solid #E6E8EE;border-radius:16px;padding:19px 20px;display:flex;flex-direction:column;gap:10px}
+.kpi .lab{font-size:12px;color:#646D7E;font-weight:600}
+.kpi .val{font-size:36px;line-height:1;font-weight:600;letter-spacing:-.02em;direction:ltr}
+.kpi .val small{font-size:18px;color:#646D7E;font-weight:500}
+.kpi .cap{font-size:12px;color:#8A93A3}
 
-.sidebar{
-    width:300px;
-    background:var(--sidebar);
-    border-left:1px solid var(--border);
-    overflow:auto;
-    padding:20px;
-}
+.grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:16px;padding:20px 22px}
+.card .hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+.card .hd h3{margin:0;font-size:15px;font-weight:600}
+.card .hd .meta{font-size:12.5px;color:#646D7E}
 
-.logo{
-    font-size:20px;
-    font-weight:bold;
-    margin-bottom:20px;
-}
+.dist{display:flex;flex-direction:column;gap:15px;margin-top:10px}
+.drow{display:flex;flex-direction:column;gap:6px}
+.drow .l{display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.drow .l .v{color:#646D7E}
+.drow .l .v b{color:#15171E;font-weight:600}
+.bar{height:10px;border-radius:999px;background:#F0F2F6;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:999px}
 
-.add-controls{
-    display:flex;
-    gap:8px;
-    margin-bottom:20px;
-    flex-wrap:wrap;
-}
+.tbl{width:100%;border-collapse:collapse;margin-top:6px}
+.tbl th{text-align:start;font-size:11.5px;color:#8A93A3;font-weight:600;padding:10px 8px;border-bottom:1px solid #E6E8EE}
+.tbl th.num,.tbl td.num{text-align:end;direction:ltr}
+.tbl td{padding:13px 8px;border-bottom:1px solid #F0F2F6;font-size:13.5px}
+.tbl td.num{font-weight:600}
+.tbl tr:last-child td{border-bottom:none}
+.tag{display:inline-flex;align-items:center;gap:8px;font-weight:500}
+.dot{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+.mini{display:inline-block;width:60px;height:7px;border-radius:999px;background:#F0F2F6;overflow:hidden;vertical-align:middle;margin-inline-start:9px}
+.mini i{display:block;height:100%;background:#2D5BFF;border-radius:999px}
+.pill-k{font-size:12px;color:#646D7E}
 
-.btn{
-    border:none;
-    background:var(--primary);
-    color:white;
-    padding:10px 12px;
-    border-radius:10px;
-    cursor:pointer;
-    transition:.2s;
-    font-size:13px;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:6px;
-    flex:1;
-    min-width:100px;
-}
+.gbars{display:flex;align-items:flex-end;gap:12px;height:220px;padding-top:16px;border-bottom:1px solid #E6E8EE}
+.gbars .gb{flex:1;display:flex;flex-direction:column;align-items:center;gap:9px;justify-content:flex-end;height:100%}
+.gbars .gb .pct{font-size:12.5px;font-weight:600;direction:ltr}
+.gbars .gb .col{width:100%;max-width:52px;border-radius:8px 8px 0 0;min-height:4px}
+.glabels{display:flex;gap:12px;margin-top:10px}
+.glabels .gl{flex:1;text-align:center;font-size:12px;color:#3A4150;font-weight:500}
 
-.btn:hover{
-    opacity:.9;
-}
+.sel{height:38px;padding:0 12px;border-radius:10px;border:1px solid #E6E8EE;background:#fff;font:inherit;font-size:13px;font-weight:500;color:#3A4150;cursor:pointer}
+.badge{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px}
+.badge.g{background:#E2F5F2;color:#0C7266}
+.badge.b{background:#EEF2FF;color:#2D5BFF}
+.badge.a{background:#FBEFE0;color:#AD5E12}
 
-.btn-success{
-    background:var(--success);
-}
-
-.grade{
-    margin-bottom:15px;
-}
-
-.grade-title{
-    color:#60a5fa;
-    font-weight:bold;
-    font-size:14px;
-    margin-bottom:8px;
-}
-
-.section{
-    background:var(--card);
-    padding:10px;
-    border-radius:8px;
-    margin-bottom:6px;
-    cursor:pointer;
-    transition:.2s;
-    font-size:13px;
-}
-
-.section:hover{
-    background:var(--card2);
-}
-
-.section.active{
-    border:2px solid var(--primary);
-    background:var(--card2);
-}
-
-.main{
-    flex:1;
-    padding:25px;
-    overflow:auto;
-    display:flex;
-    flex-direction:column;
-}
-
-.topbar{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:20px;
-    flex-wrap:wrap;
-    gap:15px;
-}
-
-.page-title{
-    font-size:28px;
-    font-weight:bold;
-}
-
-.tabs{
-    display:flex;
-    gap:10px;
-    margin-bottom:20px;
-}
-
-.tab{
-    background:var(--card);
-    border:none;
-    color:white;
-    padding:10px 16px;
-    border-radius:8px;
-    cursor:pointer;
-    font-size:14px;
-    font-weight:500;
-    transition:.2s;
-}
-
-.tab.active{
-    background:var(--primary);
-}
-
-.tab-content{
-    flex:1;
-    overflow:auto;
-}
-
-.content{
-    flex:1;
-    overflow:auto;
-}
-
-.stats{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-    gap:15px;
-    margin-bottom:20px;
-}
-
-.stat-card{
-    background:var(--card);
-    border-radius:12px;
-    padding:20px;
-    border:1px solid var(--border);
-}
-
-.stat-title{
-    color:var(--muted);
-    font-size:13px;
-}
-
-.stat-value{
-    margin-top:10px;
-    font-size:28px;
-    font-weight:bold;
-}
-
-.lesson-card{
-    background:var(--card);
-    margin-bottom:10px;
-    border-radius:8px;
-    padding:15px;
-    border:1px solid var(--border);
-}
-
-.lesson-row{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-}
-
-.lesson-title{
-    display:flex;
-    align-items:center;
-    gap:12px;
-    font-size:15px;
-}
-
-.lesson-title input{
-    width:18px;
-    height:18px;
-    cursor:pointer;
-}
-
-.lesson-title label{
-    cursor:pointer;
-}
-
-.modal{
-    display:none;
-    position:fixed;
-    top:0;
-    left:0;
-    right:0;
-    bottom:0;
-    background:rgba(0,0,0,.7);
-    z-index:1000;
-    align-items:center;
-    justify-content:center;
-}
-
-.modal.active{
-    display:flex;
-}
-
-.modal-content{
-    background:var(--card);
-    border-radius:12px;
-    padding:25px;
-    width:90%;
-    max-width:500px;
-    max-height:90vh;
-    overflow:auto;
-}
-
-.modal-title{
-    font-size:20px;
-    font-weight:bold;
-    margin-bottom:15px;
-}
-
-.form-group{
-    margin-bottom:15px;
-}
-
-.form-group label{
-    display:block;
-    margin-bottom:5px;
-    font-size:14px;
-}
-
-.form-group input,
-.form-group select{
-    width:100%;
-    padding:8px;
-    border:1px solid var(--border);
-    border-radius:6px;
-    background:var(--bg);
-    color:white;
-    font-size:13px;
-}
-
-.modal-buttons{
-    display:flex;
-    gap:10px;
-    margin-top:20px;
-}
-
-.modal-buttons button{
-    flex:1;
-    padding:10px;
-    border:none;
-    border-radius:6px;
-    cursor:pointer;
-    font-weight:bold;
-}
-
-.btn-close{
-    background:var(--card2);
-    color:white;
-}
-
-.btn-confirm{
-    background:var(--success);
-    color:white;
-}
+.empty{background:#fff;border:1px dashed #D4D9E2;border-radius:16px;padding:48px 30px;text-align:center}
+.empty .ic{width:56px;height:56px;border-radius:16px;background:#EEF2FF;color:#2D5BFF;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.empty .ic svg{width:26px;height:26px;stroke-width:1.8}
+.empty h2{font-size:18px;font-weight:600;margin-bottom:6px}
+.empty p{font-size:13.5px;color:#646D7E;margin-bottom:20px;max-width:420px;margin-inline:auto}
+.hide{display:none!important}
+.muted-note{font-size:12.5px;color:#8A93A3}
 </style>
 </head>
 <body>
 <div class="app">
-    <div class="sidebar">
-        <div class="logo">📚 المراقبة</div>
-
-        <div class="add-controls">
-            <button class="btn btn-success" onclick="openMachineMode()">⚡ إضافة سريعة</button>
-            <button class="btn" onclick="openEditMode()">✏️ تعديل</button>
-        </div>
-
-        <div id="grades-sidebar"></div>
+  <aside class="side">
+    <div class="brand">
+      <span class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></span>
+      <span><span class="name">منار</span><br><span class="sub">{{ school }}</span></span>
     </div>
-
-    <div class="main">
-        <div class="topbar">
-            <div>
-                <div class="page-title" id="page-title">الصف 5</div>
-            </div>
-            <button class="btn" onclick="logout()">🚪 خروج</button>
-        </div>
-
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('lessons')">📚 الدروس</button>
-            <button class="tab" onclick="switchTab('stats')">📊 الإحصائيات</button>
-        </div>
-
-        <div class="content">
-            <div id="lessons-tab" class="tab-content">
-                <div id="lessons-list"></div>
-            </div>
-
-            <div id="stats-tab" class="tab-content" style="display:none;">
-                <div class="stats" id="stats-dashboard"></div>
-            </div>
-        </div>
+    <div>
+      <div class="navlabel">التحليل</div>
+      <nav class="nav">
+        <button class="on" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>نظرة عامة</button>
+        <button data-tab="tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 3H8z"/><rect x="4" y="6" width="16" height="15" rx="2"/><path d="M9 12h6M9 16h4"/></svg>أدوات القياس</button>
+        <button data-tab="grades"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5M15 20c0-2.2 1.3-3.6 3-3.6"/></svg>تقدّم الصفوف</button>
+      </nav>
     </div>
-</div>
-
-<!-- Machine Mode Modal -->
-<div class="modal" id="machineModal">
-    <div class="modal-content">
-        <div class="modal-title">⚡ إضافة البيانات السريعة</div>
-
-        <div id="machine-grades"></div>
-
-        <div class="modal-buttons">
-            <button class="btn-close" onclick="closeMachineMode()">إغلاق</button>
-            <button class="btn-confirm" onclick="submitMachineMode()">إضافة</button>
-        </div>
+    <div>
+      <div class="navlabel">البيانات</div>
+      <nav class="nav">
+        <a href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>إدخال البيانات</a>
+      </nav>
     </div>
+    <div class="foot">
+      <span class="av">{{ username[0]|upper }}</span>
+      <span><span class="nm">{{ username }}</span><br><span class="rl">معلّم</span></span>
+      <a href="{{ url_for('logout') }}" title="تسجيل الخروج"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div>
+        <div class="crumb" id="crumb">لوحة التحليلات</div>
+        <h1 id="page-title">نظرة عامة</h1>
+      </div>
+      <span class="sp"></span>
+      <span class="chip privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>بيانات تجميعية فقط · دون أسماء</span>
+      <a class="btn" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>إدخال سريع</a>
+    </header>
+
+    <div class="body" id="body">
+      <div id="empty" class="empty hide">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-4 4"/></svg></div>
+        <h2>لا توجد بيانات بعد</h2>
+        <p>ابدأ بإعداد الصفوف والشُعب ثم أدخل الدرجات دفعةً واحدة. ستظهر التحليلات هنا تلقائيًا.</p>
+        <a class="btn" style="width:fit-content;margin-inline:auto" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>ابدأ الإدخال</a>
+      </div>
+
+      <!-- OVERVIEW -->
+      <section id="tab-overview" data-panel>
+        <div class="kpis" id="kpis"></div>
+        <div class="grid2" style="margin-top:22px">
+          <div class="card">
+            <div class="hd"><h3>توزيع مستويات الإتقان</h3><span class="meta" id="dist-total"></span></div>
+            <div class="dist" id="dist"></div>
+          </div>
+          <div class="card">
+            <div class="hd"><h3>ملخص سريع</h3></div>
+            <div class="dist" id="quick"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TOOLS -->
+      <section id="tab-tools" data-panel class="hide">
+        <div class="card">
+          <div class="hd">
+            <h3>أدوات القياس</h3>
+            <select class="sel" id="tool-grade-filter"><option value="">كل الصفوف</option></select>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl" id="tools-tbl"><thead>
+              <tr><th>الأداة</th><th>الصف</th><th>النوع</th><th class="num">المحاولات</th><th class="num">متوسط الدرجة</th><th class="num">الإكمال</th><th>المستوى</th></tr>
+            </thead><tbody></tbody></table>
+          </div>
+          <p class="muted-note" id="tools-empty" style="margin-top:12px"></p>
+        </div>
+      </section>
+
+      <!-- GRADES -->
+      <section id="tab-grades" data-panel class="hide">
+        <div class="card">
+          <div class="hd"><h3>متوسط الإتقان حسب الصف</h3><span class="meta">النسبة المئوية لكل صف</span></div>
+          <div class="gbars" id="gbars"></div>
+          <div class="glabels" id="glabels"></div>
+        </div>
+        <div class="card" style="margin-top:22px">
+          <div class="hd"><h3>ملخص الصفوف</h3><span class="meta">إحصاءات تجميعية — لا سجلات فردية</span></div>
+          <div style="overflow-x:auto">
+            <table class="tbl" id="grades-tbl"><thead>
+              <tr><th>الصف</th><th class="num">الطلاب</th><th class="num">الشُعب</th><th class="num">الأدوات</th><th class="num">متوسط الإتقان</th><th class="num">الإكمال</th></tr>
+            </thead><tbody></tbody></table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
 </div>
 
 <script>
-const grades = ['5','6','7','8','9','10','11','12'];
-const tools = {
-    '5':['اختبار 1','اختبار 2','مشروع'],
-    '6':['اختبار 1','اختبار 2','مشروع'],
-    '7':['اختبار 1','اختبار 2','مشروع','عملي'],
-    '8':['اختبار 1','اختبار 2','اختبار 3','مشروع'],
-    '9':['اختبار 1','اختبار 2','اختبار 3','عملي'],
-    '10':['اختبار 1','اختبار 2','اختبار 3','مشروع'],
-    '11':['اختبار 1','اختبار 2','اختبار 3','مشروع','عملي'],
-    '12':['اختبار 1','اختبار 2','اختبار 3','عملي']
-};
+const api = (p) => fetch(p, {headers:{'Accept':'application/json'}}).then(r => r.ok ? r.json() : Promise.reject(r));
+const el = (id) => document.getElementById(id);
+const bandColor = {'متقدّم':'#0F9488','متمكّن':'#2D5BFF','قيد التطوّر':'#7A5AF8','مبتدئ':'#D9822B'};
 
-let currentGrade = null;
+let STRUCTURE = [];
 
-document.addEventListener('DOMContentLoaded', function(){
-    loadGrades();
+document.querySelectorAll('.nav button[data-tab]').forEach(b => {
+  b.addEventListener('click', () => switchTab(b.dataset.tab, b));
 });
-
-function loadGrades(){
-    const sidebar = document.getElementById('grades-sidebar');
-    sidebar.innerHTML = '';
-
-    grades.forEach(grade => {
-        const div = document.createElement('div');
-        div.className = 'grade';
-        div.innerHTML = `
-            <div class="grade-title">الصف ${grade}</div>
-            <div class="section" onclick="selectGrade('${grade}')">الصف ${grade}</div>
-        `;
-        sidebar.appendChild(div);
-    });
-
-    selectGrade('5');
+const TITLES = {overview:'نظرة عامة', tools:'أدوات القياس', grades:'تقدّم الصفوف'};
+function switchTab(tab, btn){
+  document.querySelectorAll('[data-panel]').forEach(p => p.classList.add('hide'));
+  el('tab-'+tab).classList.remove('hide');
+  document.querySelectorAll('.nav button[data-tab]').forEach(x => x.classList.remove('on'));
+  (btn || document.querySelector(`.nav button[data-tab="${tab}"]`)).classList.add('on');
+  el('page-title').textContent = TITLES[tab];
 }
 
-function selectGrade(grade){
-    currentGrade = grade;
-    document.getElementById('page-title').textContent = `الصف ${grade}`;
-
-    loadLessons(grade);
-    loadStats(grade);
+function kpi(lab, val, unit, cap){
+  return `<div class="kpi"><div class="lab">${lab}</div><div class="val">${val}${unit?`<small>${unit}</small>`:''}</div><div class="cap">${cap||''}</div></div>`;
 }
 
-function loadLessons(grade){
-    const list = document.getElementById('lessons-list');
-    const gradeLessons = tools[grade] || [];
-    list.innerHTML = '';
+async function load(){
+  const [ov, tools, grades, structure] = await Promise.all([
+    api('/api/overview'), api('/api/tools'), api('/api/grades-progress'), api('/api/structure')
+  ]).catch(() => [null,null,null,null]);
+  STRUCTURE = structure || [];
 
-    if(gradeLessons.length === 0){
-        list.innerHTML = '<p>لا توجد دروس</p>';
-        return;
-    }
+  const hasData = ov && (ov.total_records > 0 || ov.total_students > 0);
+  if(!hasData){
+    el('empty').classList.remove('hide');
+    document.querySelectorAll('[data-panel]').forEach(p => p.classList.add('hide'));
+    return;
+  }
+  el('empty').classList.add('hide');
 
-    gradeLessons.forEach((lesson, idx) => {
-        const card = document.createElement('div');
-        card.className = 'lesson-card';
-        card.innerHTML = `
-            <div class="lesson-row">
-                <div class="lesson-title">
-                    <input type="checkbox" id="lesson-${grade}-${idx}">
-                    <label for="lesson-${grade}-${idx}">${lesson}</label>
-                </div>
-                <div style="font-size:12px;color:var(--muted);">0%</div>
-            </div>
-        `;
-        list.appendChild(card);
-    });
+  // KPIs
+  el('kpis').innerHTML =
+    kpi('الطلاب المسجّلون', ov.total_students.toLocaleString('en'), '', `عبر ${ov.total_sections} شعبة`) +
+    kpi('متوسط الإتقان', ov.average, '%', `${ov.total_records.toLocaleString('en')} درجة مُدخلة`) +
+    kpi('نسبة الإكمال', ov.completion, '%', 'من الدرجات المتوقّعة') +
+    kpi('تحت الحد الأدنى', ov.at_risk, '%', 'نسبة الدرجات دون 55%');
+
+  // distribution
+  el('dist-total').textContent = `من ${ov.total_records.toLocaleString('en')} درجة`;
+  el('dist').innerHTML = ov.distribution.map(d => `
+    <div class="drow">
+      <div class="l"><span>${d.name}</span><span class="v"><b>${d.pct}%</b> · <span class="ltr">${d.count}</span></span></div>
+      <div class="bar"><i style="width:${d.pct}%;background:${d.color}"></i></div>
+    </div>`).join('');
+
+  // quick summary
+  el('quick').innerHTML = `
+    <div class="drow"><div class="l"><span>عدد الصفوف</span><span class="v"><b class="ltr">${ov.total_grades}</b></span></div></div>
+    <div class="drow"><div class="l"><span>عدد الشُعب</span><span class="v"><b class="ltr">${ov.total_sections}</b></span></div></div>
+    <div class="drow"><div class="l"><span>إجمالي الدرجات المُدخلة</span><span class="v"><b class="ltr">${ov.total_records.toLocaleString('en')}</b></span></div></div>
+    <div class="drow"><div class="l"><span>متوسط الإتقان العام</span><span class="v"><b class="ltr">${ov.average}%</b></span></div></div>`;
+
+  renderTools(tools || []);
+  renderGrades(grades || []);
+  buildToolFilter();
 }
 
-function loadStats(grade){
-    const stats = document.getElementById('stats-dashboard');
-    const gradeLessons = tools[grade] || [];
-
-    if(gradeLessons.length === 0){
-        stats.innerHTML = '<p>لا توجد إحصائيات</p>';
-        return;
-    }
-
-    stats.innerHTML = gradeLessons.map(lesson => `
-        <div class="stat-card">
-            <div class="stat-title">${lesson}</div>
-            <div class="stat-value">0%</div>
-        </div>
-    `).join('');
+function kindBadge(kind){
+  return `<span class="pill-k">${kind}</span>`;
+}
+function levelBadge(lvl){
+  const map = {'سهل':'g','متوسط':'b','صعب':'a'};
+  if(lvl === '—') return '<span class="pill-k">—</span>';
+  return `<span class="badge ${map[lvl]||'b'}">${lvl}</span>`;
 }
 
-function switchTab(tab){
-    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-    document.getElementById(tab + '-tab').style.display = 'block';
-
-    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-    event.target.classList.add('active');
+let ALL_TOOLS = [];
+function renderTools(tools){
+  ALL_TOOLS = tools;
+  drawToolRows(tools);
+}
+function drawToolRows(tools){
+  const tb = el('tools-tbl').querySelector('tbody');
+  tb.innerHTML = tools.map(t => `
+    <tr>
+      <td><span class="tag"><span class="dot" style="background:${colorForKind(t.kind)}"></span>${t.name}</span></td>
+      <td style="color:#646D7E">${t.grade_name}</td>
+      <td>${kindBadge(t.kind)}</td>
+      <td class="num">${t.submissions.toLocaleString('en')}</td>
+      <td class="num">${t.submissions? t.average+'%' : '—'}</td>
+      <td class="num"><span class="mini"><i style="width:${t.completion}%"></i></span>${t.completion}%</td>
+      <td>${levelBadge(t.difficulty)}</td>
+    </tr>`).join('');
+  el('tools-empty').textContent = tools.length ? '' : 'لا توجد أدوات بعد — أضِفها من صفحة الإدخال.';
+}
+function colorForKind(k){
+  return {'تكويني':'#2D5BFF','ختامي':'#0F9488','أدائي':'#D9822B','تطبيقي':'#7A5AF8'}[k] || '#2D5BFF';
+}
+function buildToolFilter(){
+  const sel = el('tool-grade-filter');
+  sel.innerHTML = '<option value="">كل الصفوف</option>' +
+    STRUCTURE.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+  sel.onchange = () => {
+    const gid = sel.value;
+    drawToolRows(gid ? ALL_TOOLS.filter(t => String(t.grade_id) === gid) : ALL_TOOLS);
+  };
 }
 
-function openMachineMode(){
-    const modal = document.getElementById('machineModal');
-    const machine = document.getElementById('machine-grades');
+function renderGrades(grades){
+  const withData = grades.filter(g => g.records > 0);
+  const scaleMax = Math.max(90, ...withData.map(g => g.average));
+  el('gbars').innerHTML = grades.map(g => {
+    const h = g.records ? Math.max(4, (g.average / scaleMax) * 100) : 4;
+    const color = !g.records ? '#E3E8FF' : (g.average < 70 ? '#D9822B' : (g.average >= 85 ? '#0F9488' : '#2D5BFF'));
+    return `<div class="gb"><span class="pct">${g.records? g.average+'%':'—'}</span><div class="col" style="height:${h}%;background:${color}"></div></div>`;
+  }).join('');
+  el('glabels').innerHTML = grades.map(g => `<span class="gl">${g.name}</span>`).join('');
 
-    machine.innerHTML = grades.map(g => `
-        <div class="form-group">
-            <label>الصف ${g}</label>
-            <input type="number" id="sections-${g}" placeholder="عدد الشعب" value="1" min="1">
-        </div>
-    `).join('');
-
-    modal.classList.add('active');
+  const tb = el('grades-tbl').querySelector('tbody');
+  tb.innerHTML = grades.map(g => `
+    <tr>
+      <td style="font-weight:600">${g.name}</td>
+      <td class="num">${g.students.toLocaleString('en')}</td>
+      <td class="num">${g.sections}</td>
+      <td class="num">${g.tools}</td>
+      <td class="num">${g.records? g.average+'%' : '—'}</td>
+      <td class="num">${g.completion}%</td>
+    </tr>`).join('');
 }
 
-function closeMachineMode(){
-    document.getElementById('machineModal').classList.remove('active');
-}
-
-function submitMachineMode(){
-    const data = {};
-    grades.forEach(g => {
-        const sections = parseInt(document.getElementById(`sections-${g}`).value) || 1;
-        if(sections > 0){
-            data[g] = sections;
-        }
-    });
-
-    alert('✅ تمت إضافة: ' + Object.entries(data).map(([g,s]) => `الصف ${g} (${s} شعب)`).join(', '));
-    closeMachineMode();
-}
-
-function openEditMode(){
-    alert('✏️ وضع التعديل قريباً');
-}
-
-function logout(){
-    if(confirm('تسجيل الخروج؟')){
-        window.location.href = '/logout';
-    }
-}
+load();
 </script>
 </body>
 </html>

@@ -1,143 +1,63 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teaching Monitor - تسجيل الدخول</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            width: 100%;
-            max-width: 400px;
-        }
-        .login-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .login-header h1 {
-            color: #333;
-            font-size: 28px;
-            margin-bottom: 10px;
-        }
-        .login-header p {
-            color: #666;
-            font-size: 14px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-        input[type="text"],
-        input[type="password"],
-        input[type="email"] {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        .login-btn {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .login-btn:hover {
-            transform: translateY(-2px);
-        }
-        .error {
-            color: #e74c3c;
-            font-size: 14px;
-            margin-top: 5px;
-        }
-        .signup-link {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-            font-size: 14px;
-        }
-        .signup-link a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .default-login {
-            background: #f0f4ff;
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 20px;
-            font-size: 13px;
-            color: #555;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الدخول — منار</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;-webkit-font-smoothing:antialiased}
+.wrap{width:100%;max-width:400px}
+.brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:26px}
+.brand .mark{width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,#2D5BFF,#7A5AF8);display:flex;align-items:center;justify-content:center}
+.brand .name{font-weight:700;font-size:22px;letter-spacing:-.01em}
+.brand .sub{font-size:11px;color:#8A93A3}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:18px;padding:30px 28px;box-shadow:0 1px 3px rgba(20,22,30,.04)}
+.card h1{font-size:19px;font-weight:600;margin-bottom:4px}
+.card .lead{font-size:13px;color:#646D7E;margin-bottom:22px}
+.fg{margin-bottom:16px}
+label{display:block;font-size:13px;font-weight:600;color:#3A4150;margin-bottom:7px}
+input{width:100%;height:44px;padding:0 14px;border:1px solid #E6E8EE;border-radius:11px;font:inherit;font-size:14px;color:#15171E;background:#fff;transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:#9AA2B0}
+input:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3px rgba(45,91,255,.12)}
+.btn{width:100%;height:46px;margin-top:6px;background:#2D5BFF;color:#fff;border:none;border-radius:11px;font:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s}
+.btn:hover{background:#2348cf}
+.error{display:flex;align-items:center;gap:8px;background:#FBECEC;border:1px solid #F3D4D4;color:#B42318;font-size:13px;padding:10px 12px;border-radius:10px;margin-bottom:16px}
+.error svg{width:16px;height:16px;flex:0 0 16px}
+.foot{text-align:center;font-size:13px;color:#646D7E;margin-top:20px}
+.foot a{color:#2D5BFF;text-decoration:none;font-weight:600}
+.foot a:hover{text-decoration:underline}
+.privacy{display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;color:#0C7266;background:#E2F5F2;border:1px solid #CDEBE6;border-radius:999px;padding:7px 14px;margin-top:18px;width:fit-content;margin-inline:auto}
+.privacy svg{width:14px;height:14px}
+</style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-header">
-            <h1>📚 Teaching Monitor</h1>
-            <p>نظام إدارة الدرجات للمدارس العمانية</p>
-        </div>
-
-        <form method="POST">
-            <div class="form-group">
-                <label for="username">اسم المستخدم</label>
-                <input type="text" id="username" name="username" required placeholder="أدخل اسم المستخدم">
-            </div>
-
-            <div class="form-group">
-                <label for="password">كلمة المرور</label>
-                <input type="password" id="password" name="password" required placeholder="أدخل كلمة المرور">
-            </div>
-
-            {% if error %}
-                <div class="error">❌ {{ error }}</div>
-            {% endif %}
-
-            <button type="submit" class="login-btn">تسجيل الدخول</button>
-
-            <div class="default-login" style="background:#1a472a; border-color:#22c55e; color:#4ade80;">
-                <strong>✅ بيانات الاختبار:</strong><br>
-                اسم المستخدم: <code style="background:#0f1f1a; padding:2px 6px; border-radius:3px;">admin</code><br>
-                كلمة المرور: <code style="background:#0f1f1a; padding:2px 6px; border-radius:3px;">admin</code>
-            </div>
-        </form>
-
-        <div class="signup-link">
-            ليس لديك حساب؟ <a href="{{ url_for('register') }}">إنشاء حساب جديد</a>
-        </div>
-    </div>
+<div class="wrap">
+  <div class="brand">
+    <span class="mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></span>
+    <span><span class="name">منار</span><br><span class="sub">تحليلات تقدّم الطلاب</span></span>
+  </div>
+  <div class="card">
+    <h1>تسجيل الدخول</h1>
+    <p class="lead">أدخل بياناتك للوصول إلى لوحة التحليلات.</p>
+    {% if error %}
+    <div class="error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+      <div class="fg">
+        <label for="username">اسم المستخدم</label>
+        <input type="text" id="username" name="username" required autocomplete="username" placeholder="اسم المستخدم">
+      </div>
+      <div class="fg">
+        <label for="password">كلمة المرور</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="كلمة المرور">
+      </div>
+      <button type="submit" class="btn">دخول</button>
+    </form>
+    <div class="foot">ليس لديك حساب؟ <a href="{{ url_for('register') }}">إنشاء حساب</a></div>
+  </div>
+  <div class="privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>بيانات تجميعية فقط · دون أسماء طلاب</div>
+</div>
 </body>
 </html>

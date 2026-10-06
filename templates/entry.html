@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إدخال البيانات — منار</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.app{display:flex;flex-wrap:wrap;min-height:100vh}
+.side{width:252px;flex:0 0 252px;background:#15171E;color:#C7CCD6;padding:24px 18px;display:flex;flex-direction:column;gap:28px}
+.brand{display:flex;align-items:center;gap:11px;padding:0 6px}
+.brand .mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(140deg,#2D5BFF,#7A5AF8);display:flex;align-items:center;justify-content:center;flex:0 0 34px}
+.brand .name{font-weight:700;color:#fff;font-size:17px}
+.brand .sub{font-size:11px;color:#8A93A3}
+.navlabel{font-size:11px;color:#6B7486;padding:0 10px;margin-bottom:8px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-size:14px;font-weight:500;color:#AEB5C2}
+.nav a:hover{background:#20232D;color:#fff}
+.nav a.on{background:#262A36;color:#fff}
+.nav svg{width:17px;height:17px;flex:0 0 17px;stroke-width:1.9}
+.side .foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#20232D}
+.side .foot .av{width:34px;height:34px;border-radius:50%;background:#394052;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:0 0 34px}
+.side .foot .nm{font-size:13px;color:#fff;font-weight:600}
+.side .foot .rl{font-size:11px;color:#8A93A3}
+.side .foot a{margin-inline-start:auto;color:#8A93A3;display:flex}
+.side .foot a:hover{color:#fff}
+.main{flex:999 1 620px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:22px 34px;border-bottom:1px solid #E6E8EE}
+.top h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.01em}
+.top .crumb{font-size:12.5px;color:#646D7E;margin-bottom:3px}
+.top .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;border-radius:10px;border:1px solid #E6E8EE;background:#fff;font-size:13px;font-weight:600;color:#3A4150}
+.chip svg{width:15px;height:15px;stroke-width:1.9}
+.body{padding:26px 34px 48px;display:flex;flex-direction:column;gap:22px;max-width:1040px}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:16px;padding:22px 24px}
+.card .hd{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.card .hd .n{width:26px;height:26px;border-radius:8px;background:#EEF2FF;color:#2D5BFF;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:0 0 26px}
+.card .hd h3{margin:0;font-size:16px;font-weight:600}
+.card .lead{font-size:13px;color:#646D7E;margin:0 0 18px 36px}
+label{display:block;font-size:12.5px;font-weight:600;color:#3A4150;margin-bottom:6px}
+input,select,textarea{font:inherit;color:#15171E;background:#fff;border:1px solid #E6E8EE;border-radius:10px}
+input,select{height:42px;padding:0 12px;font-size:14px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3px rgba(45,91,255,.12)}
+input[type=number]{direction:ltr;text-align:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 18px;border-radius:10px;background:#2D5BFF;color:#fff;font:inherit;font-size:14px;font-weight:600;border:none;cursor:pointer}
+.btn:hover{background:#2348cf}
+.btn.ghost{background:#fff;color:#3A4150;border:1px solid #E6E8EE}
+.btn.ghost:hover{background:#F4F5F8}
+.btn.sm{height:36px;padding:0 13px;font-size:13px}
+.btn.danger{background:#fff;color:#B42318;border:1px solid #F3D4D4}
+.btn.danger:hover{background:#FBECEC}
+
+/* setup grid */
+.setup{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px 16px;align-items:center}
+.setup .h{font-size:11.5px;color:#8A93A3;font-weight:600;padding-bottom:4px;border-bottom:1px solid #F0F2F6}
+.setup .gname{font-size:14px;font-weight:500;display:flex;align-items:center;gap:9px}
+.setup .gname .dot{width:28px;height:28px;border-radius:8px;background:#F0F2F6;color:#3A4150;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;direction:ltr}
+.setup .row-in{display:flex}
+.opts{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:20px;flex-wrap:wrap}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:#3A4150}
+.check input{width:18px;height:18px;accent-color:#2D5BFF}
+
+/* bulk */
+.pickers{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.full{grid-column:1/-1}
+textarea{width:100%;min-height:150px;padding:12px 14px;font-size:15px;line-height:1.9;resize:vertical;direction:ltr;text-align:left;font-variant-numeric:tabular-nums}
+.bulk-foot{display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap}
+.live{font-size:13px;color:#646D7E}
+.live b{color:#15171E}
+.toast{display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:10px}
+.toast.ok{display:inline-flex;background:#E2F5F2;color:#0C7266}
+.toast.err{display:inline-flex;background:#FBECEC;color:#B42318}
+
+/* tools manager */
+.tools-mgr{margin-top:18px;border-top:1px solid #F0F2F6;padding-top:18px}
+.tool-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.tool-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #E6E8EE;border-radius:10px;font-size:13.5px}
+.tool-item .nm{font-weight:600;flex:1}
+.tool-item .k{font-size:12px;color:#646D7E}
+.tool-item .ms{font-size:12px;color:#8A93A3;direction:ltr}
+.add-tool{display:grid;grid-template-columns:1.6fr 1fr .7fr auto;gap:10px;align-items:end}
+.muted{font-size:12.5px;color:#8A93A3}
+.hint{font-size:12px;color:#8A93A3;margin-top:7px;direction:ltr;text-align:left}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <span class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></span>
+      <span><span class="name">منار</span><br><span class="sub">{{ school }}</span></span>
+    </div>
+    <div>
+      <div class="navlabel">التحليل</div>
+      <nav class="nav">
+        <a href="{{ url_for('dashboard') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>لوحة التحليلات</a>
+      </nav>
+    </div>
+    <div>
+      <div class="navlabel">البيانات</div>
+      <nav class="nav">
+        <a class="on" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>إدخال البيانات</a>
+      </nav>
+    </div>
+    <div class="foot">
+      <span class="av">{{ username[0]|upper }}</span>
+      <span><span class="nm">{{ username }}</span><br><span class="rl">معلّم</span></span>
+      <a href="{{ url_for('logout') }}" title="تسجيل الخروج"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">إدخال وإدارة البيانات</div><h1>إدخال البيانات</h1></div>
+      <span class="sp"></span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>دون أسماء — أرقام فقط</span>
+    </header>
+
+    <div class="body">
+      <!-- STEP 1: SETUP -->
+      <div class="card">
+        <div class="hd"><span class="n">1</span><h3>الإعداد السريع — الصفوف والشُعب</h3></div>
+        <p class="lead">حدّد عدد الشُعب وعدد الطلاب لكل شعبة في كل صف. يمكن تعديلها لاحقًا.</p>
+        <div class="setup" id="setup">
+          <div class="h">الصف</div><div class="h">عدد الشُعب</div><div class="h">طلاب لكل شعبة</div>
+        </div>
+        <div class="opts">
+          <label class="check"><input type="checkbox" id="with-tools" checked>إضافة أدوات قياس افتراضية لكل صف جديد</label>
+          <button class="btn" onclick="runSetup()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>تهيئة الصفوف</button>
+        </div>
+        <span class="toast" id="setup-toast"></span>
+      </div>
+
+      <!-- STEP 2: BULK ENTRY -->
+      <div class="card">
+        <div class="hd"><span class="n">2</span><h3>إدخال الدرجات دفعةً واحدة</h3></div>
+        <p class="lead">اختر الصف والشعبة والأداة، ثم الصق أو اكتب عمود الدرجات (مفصولة بمسافات أو فواصل أو أسطر).</p>
+        <div class="pickers">
+          <div><label>الصف</label><select id="p-grade" onchange="onGradeChange()" style="width:100%"></select></div>
+          <div><label>الشعبة</label><select id="p-section" style="width:100%"></select></div>
+          <div><label>أداة القياس</label><select id="p-tool" onchange="onToolChange()" style="width:100%"></select></div>
+          <div><label>الدرجة العظمى</label><input type="number" id="p-max" value="100" min="1" style="width:100%"></div>
+        </div>
+        <div class="full">
+          <label>الدرجات</label>
+          <textarea id="p-scores" placeholder="88  90  75&#10;62, 70, 95&#10;80"></textarea>
+          <div class="hint" id="count-hint">0 قيمة</div>
+        </div>
+        <div class="bulk-foot">
+          <button class="btn" onclick="saveScores()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>حفظ الدرجات</button>
+          <label class="check"><input type="checkbox" id="replace">استبدال الدرجات الموجودة لهذه الأداة</label>
+          <span class="sp" style="flex:1"></span>
+          <span class="live" id="saved-live"></span>
+          <span class="toast" id="save-toast"></span>
+        </div>
+
+        <!-- per-grade tools manager -->
+        <div class="tools-mgr">
+          <label style="margin-bottom:10px">أدوات هذا الصف (تختلف من صف لآخر)</label>
+          <div class="tool-list" id="tool-list"></div>
+          <div class="add-tool">
+            <div><input type="text" id="nt-name" placeholder="اسم الأداة" style="width:100%"></div>
+            <div><select id="nt-kind" style="width:100%"><option>تكويني</option><option>ختامي</option><option>أدائي</option><option>تطبيقي</option></select></div>
+            <div><input type="number" id="nt-max" value="100" min="1" title="الدرجة العظمى" style="width:100%"></div>
+            <button class="btn ghost sm" onclick="addTool()">+ أداة</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRESETS = [
+  {name:'الصف الخامس',level:5},{name:'الصف السادس',level:6},{name:'الصف السابع',level:7},
+  {name:'الصف الثامن',level:8},{name:'الصف التاسع',level:9},{name:'الصف العاشر',level:10},
+  {name:'الصف الحادي عشر',level:11},{name:'الصف الثاني عشر',level:12},
+];
+const el = (id) => document.getElementById(id);
+const jpost = (p, body, method='POST') => fetch(p,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+let STRUCTURE = [];
+
+function toast(id, msg, ok=true){
+  const t = el(id); t.className = 'toast ' + (ok?'ok':'err'); t.textContent = msg;
+  setTimeout(() => { t.className = 'toast'; }, 4000);
+}
+
+function buildSetup(){
+  const box = el('setup');
+  box.querySelectorAll('.r').forEach(n => n.remove());
+  PRESETS.forEach(p => {
+    const existing = STRUCTURE.find(g => g.name === p.name);
+    const secN = existing ? existing.sections.length : (p.level ? 1 : 0);
+    const perN = existing && existing.sections.length ? (existing.sections[0].student_count||0) : 25;
+    const row = document.createElement('div');
+    row.style.display = 'contents'; row.className = 'r';
+    row.innerHTML = `
+      <div class="gname r"><span class="dot">${p.level}</span>${p.name}</div>
+      <div class="r"><input type="number" min="0" value="${secN}" data-sec="${p.name}" style="width:100%"></div>
+      <div class="r"><input type="number" min="0" value="${perN}" data-per="${p.name}" style="width:100%"></div>`;
+    box.appendChild(row);
+  });
+}
+
+async function runSetup(){
+  const grades = PRESETS.map(p => ({
+    name: p.name, level: p.level,
+    sections: parseInt(document.querySelector(`[data-sec="${p.name}"]`).value) || 0,
+    students_per_section: parseInt(document.querySelector(`[data-per="${p.name}"]`).value) || 0,
+  })).filter(g => g.sections > 0);
+  if(!grades.length){ toast('setup-toast','أدخل عدد شُعب واحد على الأقل', false); return; }
+  const res = await jpost('/api/setup', {grades, with_default_tools: el('with-tools').checked});
+  if(res.ok){ const d = await res.json(); toast('setup-toast', `تمت التهيئة ✓ (${d.grades_created} صف جديد)`); await reload(); }
+  else toast('setup-toast','تعذّرت التهيئة', false);
+}
+
+async function reload(){
+  STRUCTURE = await fetch('/api/structure').then(r => r.json());
+  buildSetup();
+  const gsel = el('p-grade');
+  const prev = gsel.value;
+  gsel.innerHTML = STRUCTURE.map(g => `<option value="${g.id}">${g.name}</option>`).join('')
+    || '<option value="">— هيّئ الصفوف أولًا —</option>';
+  if(prev && STRUCTURE.find(g=>String(g.id)===prev)) gsel.value = prev;
+  onGradeChange();
+}
+
+function currentGrade(){ return STRUCTURE.find(g => String(g.id) === el('p-grade').value); }
+
+function onGradeChange(){
+  const g = currentGrade();
+  el('p-section').innerHTML = g ? g.sections.map(s => `<option value="${s.id}">${s.name} · ${s.student_count} طالب</option>`).join('') : '';
+  el('p-tool').innerHTML = g ? g.tools.map(t => `<option value="${t.id}" data-max="${t.max_score}">${t.name}</option>`).join('') : '';
+  renderToolList(g);
+  onToolChange();
+}
+
+function onToolChange(){
+  const opt = el('p-tool').selectedOptions[0];
+  if(opt && opt.dataset.max) el('p-max').value = opt.dataset.max;
+  refreshSaved();
+}
+
+function countScores(){
+  const toks = (el('p-scores').value || '').split(/[\s,،;]+/).filter(x => x !== '');
+  const valid = toks.filter(x => !isNaN(parseFloat(x)));
+  el('count-hint').textContent = `${valid.length} قيمة` + (toks.length !== valid.length ? ` · ${toks.length-valid.length} غير صالحة` : '');
+  return valid.length;
+}
+el('p-scores').addEventListener('input', countScores);
+
+async function refreshSaved(){
+  const sid = el('p-section').value, tid = el('p-tool').value;
+  if(!sid || !tid){ el('saved-live').textContent=''; return; }
+  const d = await fetch(`/api/sections/${sid}/tools/${tid}/scores`).then(r=>r.json());
+  if(d.count){
+    const avg = (d.scores.reduce((a,b)=>a+b,0)/d.count);
+    const pct = d.max_score ? (avg/d.max_score*100) : 0;
+    el('saved-live').innerHTML = `محفوظ: <b class="ltr">${d.count}</b> درجة · المتوسط <b class="ltr">${pct.toFixed(1)}%</b>`;
+  } else el('saved-live').textContent = 'لا درجات محفوظة بعد لهذه الأداة';
+}
+
+async function saveScores(){
+  const sid = el('p-section').value, tid = el('p-tool').value;
+  if(!sid || !tid){ toast('save-toast','اختر الصف والشعبة والأداة', false); return; }
+  const scores = el('p-scores').value.trim();
+  if(!scores){ toast('save-toast','ألصق بعض الدرجات أولًا', false); return; }
+  const res = await jpost(`/api/sections/${sid}/tools/${tid}/scores`, {
+    scores, max_score: parseFloat(el('p-max').value)||100, replace: el('replace').checked
+  });
+  if(res.ok){
+    const d = await res.json();
+    toast('save-toast', `حُفظت ${d.added} درجة` + (d.skipped? ` · تُجووزت ${d.skipped}`:''));
+    el('p-scores').value=''; countScores(); refreshSaved();
+  } else toast('save-toast','تعذّر الحفظ', false);
+}
+
+function renderToolList(g){
+  const list = el('tool-list');
+  if(!g){ list.innerHTML = '<span class="muted">هيّئ صفًا لإدارة أدواته</span>'; return; }
+  list.innerHTML = g.tools.length ? g.tools.map(t => `
+    <div class="tool-item">
+      <span class="nm">${t.name}</span>
+      <span class="k">${t.kind}</span>
+      <span class="ms">من ${t.max_score}</span>
+      <button class="btn danger sm" onclick="delTool(${t.id})">حذف</button>
+    </div>`).join('') : '<span class="muted">لا أدوات بعد لهذا الصف</span>';
+}
+
+async function addTool(){
+  const g = currentGrade();
+  if(!g){ toast('save-toast','اختر صفًا أولًا', false); return; }
+  const name = el('nt-name').value.trim();
+  if(!name){ toast('save-toast','اكتب اسم الأداة', false); return; }
+  const res = await jpost(`/api/grades/${g.id}/tools`, {
+    name, kind: el('nt-kind').value, max_score: parseFloat(el('nt-max').value)||100
+  });
+  if(res.ok){ el('nt-name').value=''; await reload(); toast('save-toast','أُضيفت الأداة'); }
+  else toast('save-toast','تعذّرت الإضافة', false);
+}
+
+async function delTool(tid){
+  if(!confirm('حذف هذه الأداة وكل درجاتها؟')) return;
+  await fetch(`/api/tools/${tid}`, {method:'DELETE'});
+  await reload();
+}
+
+el('p-section').addEventListener('change', refreshSaved);
+reload();
+</script>
+</body>
+</html>

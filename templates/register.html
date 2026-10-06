@@ -1,145 +1,75 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teaching Monitor - إنشاء حساب</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .register-container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            width: 100%;
-            max-width: 400px;
-        }
-        .register-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .register-header h1 {
-            color: #333;
-            font-size: 28px;
-            margin-bottom: 10px;
-        }
-        .register-header p {
-            color: #666;
-            font-size: 14px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-        input[type="text"],
-        input[type="password"],
-        input[type="email"] {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        .register-btn {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .register-btn:hover {
-            transform: translateY(-2px);
-        }
-        .error {
-            color: #e74c3c;
-            font-size: 14px;
-            margin-top: 5px;
-        }
-        .login-link {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-            font-size: 14px;
-        }
-        .login-link a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إنشاء حساب — منار</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;-webkit-font-smoothing:antialiased}
+.wrap{width:100%;max-width:420px}
+.brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:22px}
+.brand .mark{width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,#2D5BFF,#7A5AF8);display:flex;align-items:center;justify-content:center}
+.brand .name{font-weight:700;font-size:22px;letter-spacing:-.01em}
+.brand .sub{font-size:11px;color:#8A93A3}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:18px;padding:30px 28px;box-shadow:0 1px 3px rgba(20,22,30,.04)}
+.card h1{font-size:19px;font-weight:600;margin-bottom:4px}
+.card .lead{font-size:13px;color:#646D7E;margin-bottom:22px}
+.fg{margin-bottom:15px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:block;font-size:13px;font-weight:600;color:#3A4150;margin-bottom:7px}
+input{width:100%;height:44px;padding:0 14px;border:1px solid #E6E8EE;border-radius:11px;font:inherit;font-size:14px;color:#15171E;background:#fff;transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:#9AA2B0}
+input:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3px rgba(45,91,255,.12)}
+.btn{width:100%;height:46px;margin-top:6px;background:#2D5BFF;color:#fff;border:none;border-radius:11px;font:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s}
+.btn:hover{background:#2348cf}
+.error{display:flex;align-items:center;gap:8px;background:#FBECEC;border:1px solid #F3D4D4;color:#B42318;font-size:13px;padding:10px 12px;border-radius:10px;margin-bottom:16px}
+.error svg{width:16px;height:16px;flex:0 0 16px}
+.foot{text-align:center;font-size:13px;color:#646D7E;margin-top:20px}
+.foot a{color:#2D5BFF;text-decoration:none;font-weight:600}
+.foot a:hover{text-decoration:underline}
+</style>
 </head>
 <body>
-    <div class="register-container">
-        <div class="register-header">
-            <h1>📚 Teaching Monitor</h1>
-            <p>إنشاء حساب جديد</p>
+<div class="wrap">
+  <div class="brand">
+    <span class="mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></span>
+    <span><span class="name">منار</span><br><span class="sub">تحليلات تقدّم الطلاب</span></span>
+  </div>
+  <div class="card">
+    <h1>إنشاء حساب</h1>
+    <p class="lead">أنشئ حساب معلّم للبدء في تتبّع التقدّم.</p>
+    {% if error %}
+    <div class="error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+      <div class="fg">
+        <label for="username">اسم المستخدم</label>
+        <input type="text" id="username" name="username" required autocomplete="username" placeholder="اسم المستخدم">
+      </div>
+      <div class="fg">
+        <label for="school">المدرسة</label>
+        <input type="text" id="school" name="school" placeholder="اسم المدرسة (اختياري)">
+      </div>
+      <div class="fg">
+        <label for="email">البريد الإلكتروني</label>
+        <input type="email" id="email" name="email" autocomplete="email" placeholder="name@school.om (اختياري)">
+      </div>
+      <div class="row">
+        <div class="fg">
+          <label for="password">كلمة المرور</label>
+          <input type="password" id="password" name="password" required autocomplete="new-password" placeholder="••••••••">
         </div>
-
-        <form method="POST">
-            <div class="form-group">
-                <label for="username">اسم المستخدم</label>
-                <input type="text" id="username" name="username" required placeholder="أدخل اسم المستخدم">
-            </div>
-
-            <div class="form-group">
-                <label for="email">البريد الإلكتروني</label>
-                <input type="email" id="email" name="email" required placeholder="أدخل بريدك الإلكتروني">
-            </div>
-
-            <div class="form-group">
-                <label for="school">اسم المدرسة</label>
-                <input type="text" id="school" name="school" required placeholder="أدخل اسم مدرستك">
-            </div>
-
-            <div class="form-group">
-                <label for="password">كلمة المرور</label>
-                <input type="password" id="password" name="password" required placeholder="أدخل كلمة المرور">
-            </div>
-
-            <div class="form-group">
-                <label for="confirm_password">تأكيد كلمة المرور</label>
-                <input type="password" id="confirm_password" name="confirm_password" required placeholder="أعد إدخال كلمة المرور">
-            </div>
-
-            {% if error %}
-                <div class="error">❌ {{ error }}</div>
-            {% endif %}
-
-            <button type="submit" class="register-btn">إنشاء حساب</button>
-        </form>
-
-        <div class="login-link">
-            هل لديك حساب بالفعل؟ <a href="{{ url_for('login') }}">تسجيل الدخول</a>
+        <div class="fg">
+          <label for="confirm_password">تأكيد كلمة المرور</label>
+          <input type="password" id="confirm_password" name="confirm_password" required autocomplete="new-password" placeholder="••••••••">
         </div>
-    </div>
+      </div>
+      <button type="submit" class="btn">إنشاء الحساب</button>
+    </form>
+    <div class="foot">لديك حساب بالفعل؟ <a href="{{ url_for('login') }}">تسجيل الدخول</a></div>
+  </div>
+</div>
 </body>
 </html>

@@ -1,0 +1,28 @@
+# Render blueprint — منار / Teaching Monitor
+# The database lives on Neon (free Postgres). After creating the Neon project,
+# copy its connection string into the DATABASE_URL env var on the Render service.
+services:
+  - type: web
+    name: manar
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2
+    healthCheckPath: /login
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true          # Render generates a strong random key
+      - key: DATABASE_URL
+        sync: false                   # paste the Neon connection string here
+      # Optional first admin account (otherwise just register from the login page):
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SCHOOL_NAME
+        sync: false
