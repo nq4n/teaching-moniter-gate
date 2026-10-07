@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إعداد الصفوف — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+.app{display:flex;flex-wrap:wrap;min-height:100vh}
+.side{width:252px;flex:0 0 252px;background:#15171E;color:#C7CCD6;padding:24px 18px;display:flex;flex-direction:column;gap:26px}
+.brand{display:flex;align-items:center;gap:11px;padding:0 6px}
+.brand .name{font-weight:700;color:#fff;font-size:17px}
+.brand .sub{font-size:11px;color:#8A93A3}
+.navlabel{font-size:11px;color:#6B7486;padding:0 10px;margin-bottom:8px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-size:14px;font-weight:500;color:#AEB5C2}
+.nav a:hover{background:#20232D;color:#fff}
+.nav a.on{background:#262A36;color:#fff}
+.nav svg{width:17px;height:17px;flex:0 0 17px;stroke-width:1.9}
+.side .foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#20232D}
+.side .foot .av{width:34px;height:34px;border-radius:50%;background:#394052;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:0 0 34px}
+.side .foot .nm{font-size:13px;color:#fff;font-weight:600}
+.side .foot .rl{font-size:11px;color:#8A93A3}
+.side .foot a{margin-inline-start:auto;color:#8A93A3;display:flex}
+.side .foot a:hover{color:#fff}
+.main{flex:999 1 620px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:22px 34px;border-bottom:1px solid #E6E8EE}
+.top h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.01em}
+.top .crumb{font-size:12.5px;color:#646D7E;margin-bottom:3px}
+.top .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;border-radius:10px;border:1px solid #E6E8EE;background:#fff;font-size:13px;font-weight:600;color:#3A4150}
+.chip svg{width:15px;height:15px;stroke-width:1.9}
+.btn-lnk{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 15px;border-radius:10px;background:#2D5BFF;color:#fff;font-size:13px;font-weight:600}
+.btn-lnk svg{width:15px;height:15px;stroke-width:2}
+.body{padding:26px 34px 48px;display:flex;flex-direction:column;gap:22px;max-width:960px}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:16px;padding:22px 24px}
+.card .hd{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.card .hd .n{width:26px;height:26px;border-radius:8px;background:#EEF2FF;color:#2D5BFF;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:0 0 26px}
+.card .hd h3{margin:0;font-size:16px;font-weight:600}
+.card .lead{font-size:13px;color:#646D7E;margin:0 0 18px 36px}
+label{display:block;font-size:12.5px;font-weight:600;color:#3A4150;margin-bottom:6px}
+input,select{font:inherit;color:#15171E;background:#fff;border:1px solid #E6E8EE;border-radius:10px;height:42px;padding:0 12px;font-size:14px}
+input:focus,select:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3px rgba(45,91,255,.12)}
+input[type=number]{direction:ltr;text-align:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 18px;border-radius:10px;background:#2D5BFF;color:#fff;font:inherit;font-size:14px;font-weight:600;border:none;cursor:pointer}
+.btn:hover{background:#2348cf}.btn.ghost{background:#fff;color:#3A4150;border:1px solid #E6E8EE}.btn.ghost:hover{background:#F4F5F8}
+.btn.sm{height:36px;padding:0 13px;font-size:13px}.btn.danger{background:#fff;color:#B42318;border:1px solid #F3D4D4}.btn.danger:hover{background:#FBECEC}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:#3A4150}.check input{width:18px;height:18px;accent-color:#2D5BFF}
+.muted{font-size:12.5px;color:#8A93A3}
+.gpick{display:flex;flex-direction:column;gap:8px}
+.grow{display:grid;grid-template-columns:30px 1.5fr 1fr 1fr;gap:14px;align-items:center;padding:8px 10px;border:1px solid #EEF0F4;border-radius:10px}
+.grow.on{border-color:#C9D6FF;background:#FAFBFF}
+.grow .gl{font-size:14px;font-weight:500;display:flex;align-items:center;gap:9px}
+.grow .gl .dot{width:28px;height:28px;border-radius:8px;background:#F0F2F6;color:#3A4150;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;direction:ltr}
+.grow .hh{font-size:11px;color:#8A93A3;font-weight:600}
+.opts{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px;flex-wrap:wrap}
+.selrow{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:16px}
+.sec-list{display:flex;flex-direction:column;gap:8px}
+.sec-item{display:grid;grid-template-columns:1.4fr 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid #E6E8EE;border-radius:10px}
+.sec-item .lbl{font-size:11px;color:#8A93A3;font-weight:600;margin-bottom:4px}
+.danger-zone{display:flex;justify-content:flex-start;margin-top:16px;padding-top:14px;border-top:1px solid #F0F2F6}
+.toast{display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:10px;margin-top:14px}
+.toast.ok{display:inline-flex;background:#E2F5F2;color:#0C7266}.toast.err{display:inline-flex;background:#FBECEC;color:#B42318}
+</style>
+</head>
+<body>
+{{ ui.loader() }}
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <span class="mark">{{ ui.beacon(18) }}</span>
+      <span><span class="name">المنارة</span><br><span class="sub">{{ school }}</span></span>
+    </div>
+    <div>
+      <div class="navlabel">التحليل</div>
+      <nav class="nav">
+        <a href="{{ url_for('dashboard') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>لوحة التحليلات</a>
+        <a href="{{ url_for('dashboard') }}?tab=calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>التقويم</a>
+      </nav>
+    </div>
+    <div>
+      <div class="navlabel">البيانات</div>
+      <nav class="nav">
+        <a class="on" href="{{ url_for('setup_page') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>إعداد الصفوف والشُعب</a>
+        <a href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>تسجيل الدرجات</a>
+      </nav>
+    </div>
+    <div class="foot">
+      <span class="av">{{ username[0]|upper }}</span>
+      <span><span class="nm">{{ username }}</span><br><span class="rl">معلّم</span></span>
+      <a href="{{ url_for('logout') }}" title="تسجيل الخروج"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">إعداد البنية</div><h1>إعداد الصفوف والشُعب</h1></div>
+      <span class="sp"></span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>بدون أسماء — أرقام فقط</span>
+      <a class="btn-lnk" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>تسجيل الدرجات</a>
+    </header>
+
+    <div class="body">
+      <div class="card">
+        <div class="hd"><span class="n">1</span><h3>الصفوف التي تدرّسها</h3></div>
+        <p class="lead">اختر صفوفك فقط (لست مُلزمًا بكلها) وحدّد عدد الشُعب. تُنشأ أدوات القياس ودروسها تلقائيًا — بدون أي درجات.</p>
+        <div class="gpick" id="gpick"></div>
+        <div class="opts">
+          <span class="muted">عدّل عدد الطلاب لكل شعبة في الخطوة التالية.</span>
+          <button class="btn" onclick="saveGrades()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>حفظ صفوفي</button>
+        </div>
+        <span class="toast" id="g-toast"></span>
+      </div>
+
+      <div class="card">
+        <div class="hd"><span class="n">2</span><h3>الشُعب وأعداد الطلاب</h3></div>
+        <p class="lead">لكل شعبة عدد طلاب مستقل وقابل للتعديل. أضِف أو احذف الشُعب حسب الحاجة.</p>
+        <div class="selrow">
+          <div style="min-width:220px"><label>الصف</label><select id="m-grade" onchange="renderSections()" style="width:100%"></select></div>
+          <button class="btn ghost sm" onclick="addSection()">+ شعبة</button>
+        </div>
+        <div class="sec-list" id="sec-list"></div>
+        <div class="danger-zone"><button class="btn danger sm" onclick="deleteGrade()">حذف هذا الصف نهائيًا</button></div>
+        <span class="toast" id="s-toast"></span>
+      </div>
+
+      <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div><div style="font-weight:600;font-size:15px">انتهيت من الإعداد؟</div><div class="muted" style="margin-top:3px">انتقل لتسجيل درجات كل أداة عند تنفيذها خلال الفصل.</div></div>
+        <a class="btn" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>الانتقال لتسجيل الدرجات</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRESETS=[{name:'الصف الخامس',level:5},{name:'الصف السادس',level:6},{name:'الصف السابع',level:7},{name:'الصف الثامن',level:8},{name:'الصف التاسع',level:9},{name:'الصف العاشر',level:10},{name:'الصف الحادي عشر',level:11},{name:'الصف الثاني عشر',level:12}];
+const el=(id)=>document.getElementById(id);
+const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+let STRUCTURE=[];
+function toast(id,msg,ok=true){const t=el(id);t.className='toast '+(ok?'ok':'err');t.textContent=msg;setTimeout(()=>{t.className='toast';},4000);}
+function has(n){return STRUCTURE.find(g=>g.name===n);}
+function buildGradePicker(){
+  el('gpick').innerHTML=`<div class="grow" style="border:none;background:none;padding-bottom:0"><span></span><span class="hh">الصف</span><span class="hh">أُدرّسه؟</span><span class="hh">عدد الشُعب</span></div>`+
+   PRESETS.map(p=>{const ex=has(p.name);const sec=ex?ex.sections.length:1;
+    return `<div class="grow ${ex?'on':''}" id="grow-${p.level}"><span></span><span class="gl"><span class="dot">${p.level}</span>${p.name}</span>
+      <label class="check"><input type="checkbox" data-teach="${p.level}" ${ex?'checked':''} onchange="document.getElementById('grow-${p.level}').classList.toggle('on',this.checked)"></label>
+      <input type="number" min="1" value="${sec}" data-sec="${p.level}" style="width:100%"></div>`;}).join('');
+}
+async function saveGrades(){
+  const grades=[];PRESETS.forEach(p=>{const t=document.querySelector(`[data-teach="${p.level}"]`).checked;const s=parseInt(document.querySelector(`[data-sec="${p.level}"]`).value)||1;if(t)grades.push({name:p.name,level:p.level,sections:s,students_per_section:25});});
+  if(!grades.length){toast('g-toast','اختر صفًا واحدًا على الأقل',false);return;}
+  const r=await jreq('/api/setup',{grades,with_default_tools:true});
+  if(r.ok){const d=await r.json();toast('g-toast',`تم الحفظ ✓ (${d.grades_created} صف جديد)`);await reload();}else toast('g-toast','تعذّر الحفظ',false);
+}
+function curG(){return STRUCTURE.find(g=>String(g.id)===el('m-grade').value);}
+function renderSections(){
+  const g=curG(),list=el('sec-list');
+  if(!g){list.innerHTML='<span class="muted">احفظ صفوفك أولًا</span>';return;}
+  if(!g.sections.length){list.innerHTML='<span class="muted">لا شُعب — أضِف شعبة</span>';return;}
+  list.innerHTML=`<div class="sec-item" style="border:none;padding-bottom:0"><span class="lbl">اسم الشعبة</span><span class="lbl">عدد الطلاب</span><span></span></div>`+
+   g.sections.map(s=>`<div class="sec-item"><input type="text" value="${s.name}" onchange="updateSection(${s.id},{name:this.value})" style="width:100%"><input type="number" min="0" value="${s.student_count}" onchange="updateSection(${s.id},{student_count:this.value})" style="width:100%"><button class="btn danger sm" onclick="deleteSection(${s.id})">حذف</button></div>`).join('');
+}
+async function addSection(){const g=curG();if(!g){toast('s-toast','اختر صفًا',false);return;}await jreq(`/api/grades/${g.id}/sections`,{student_count:25});await reload();renderSections();}
+async function updateSection(sid,patch){await jreq(`/api/sections/${sid}`,patch,'PUT');await reloadQuiet();toast('s-toast','تم التحديث');}
+async function deleteSection(sid){if(!confirm('حذف هذه الشعبة ودرجاتها؟'))return;await fetch(`/api/sections/${sid}`,{method:'DELETE'});await reload();renderSections();}
+async function deleteGrade(){const g=curG();if(!g)return;if(!confirm(`حذف ${g.name} وكل شُعبه وأدواته ودرجاته؟`))return;await fetch(`/api/grades/${g.id}`,{method:'DELETE'});await reload();}
+function keepSel(sel,v){if(v&&[...sel.options].some(o=>o.value===v))sel.value=v;}
+async function reload(){
+  buildGradePicker();                 // always render the 8 choices first
+  try{ const r=await fetch('/api/structure'); STRUCTURE = r.ok ? await r.json() : []; }
+  catch(e){ STRUCTURE = []; }
+  if(!Array.isArray(STRUCTURE)) STRUCTURE = [];
+  buildGradePicker();                 // re-render, ticking the grades already saved
+  const mg=el('m-grade');const prev=mg.value;
+  mg.innerHTML=STRUCTURE.map(g=>`<option value="${g.id}">${g.name}</option>`).join('')||'<option value="">— احفظ صفوفك أولًا —</option>';
+  keepSel(mg,prev);renderSections();
+}
+async function reloadQuiet(){try{const r=await fetch('/api/structure');STRUCTURE=r.ok?await r.json():STRUCTURE;}catch(e){}}
+window.__mnrManualLoader=true;
+reload().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+</script>
+</body>
+</html>

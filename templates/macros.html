@@ -1,0 +1,77 @@
+{# ── المنارة brand marks & loader ── #}
+
+{% macro beacon(px=18, stroke='#fff', sw=1.7) -%}
+<svg viewBox="0 0 24 24" width="{{ px }}" height="{{ px }}" fill="none" stroke="{{ stroke }}" stroke-width="{{ sw }}" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 2.4v1.6"/>
+  <circle cx="12" cy="6" r="1.15" fill="{{ stroke }}" stroke="none"/>
+  <path d="M6.8 5.6 4.9 4.9M17.2 5.6l1.9-.7"/>
+  <path d="M9.9 9h4.2"/>
+  <path d="M10.1 9V7.7a1.9 1.9 0 0 1 3.8 0V9"/>
+  <path d="M9.9 9 8.3 20.5h7.4L14.1 9"/>
+  <path d="M9 14h6"/>
+  <path d="M6.6 20.5h10.8"/>
+</svg>
+{%- endmacro %}
+
+{% macro beaconGradient(w=86, idsuffix='x') -%}
+<svg viewBox="0 0 72 98" width="{{ w }}" height="{{ (w * 98 / 72) | round | int }}" fill="none">
+  <defs>
+    <linearGradient id="mnrTower{{ idsuffix }}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2D5BFF"/><stop offset="1" stop-color="#7A5AF8"/>
+    </linearGradient>
+    <linearGradient id="mnrTower2{{ idsuffix }}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4E78FF"/><stop offset="1" stop-color="#9570FF"/>
+    </linearGradient>
+    <radialGradient id="mnrHalo{{ idsuffix }}" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#FFE9A8" stop-opacity="0.9"/>
+      <stop offset="60%" stop-color="#FFD873" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#FFD873" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- base platform -->
+  <rect x="14" y="88" width="44" height="7" rx="3.5" fill="url(#mnrTower{{ idsuffix }})"/>
+  <rect x="19" y="82" width="34" height="7" rx="3" fill="url(#mnrTower2{{ idsuffix }})"/>
+  <!-- tower -->
+  <path d="M28 31 L23.5 82 H48.5 L44 31 Z" fill="url(#mnrTower{{ idsuffix }})"/>
+  <!-- white bands -->
+  <path d="M26 46 H46" stroke="#fff" stroke-width="3.2" opacity=".92" stroke-linecap="round"/>
+  <path d="M24.8 61 H47.2" stroke="#fff" stroke-width="3.2" opacity=".92" stroke-linecap="round"/>
+  <path d="M23.7 76 H48.3" stroke="#fff" stroke-width="3.2" opacity=".92" stroke-linecap="round"/>
+  <!-- gallery -->
+  <rect x="24.5" y="26.5" width="23" height="5" rx="2.5" fill="url(#mnrTower2{{ idsuffix }})"/>
+  <!-- lantern room -->
+  <path d="M29 26.5 V18 a7 7 0 0 1 14 0 v8.5 Z" fill="url(#mnrTower{{ idsuffix }})"/>
+  <!-- light glow + beacon -->
+  <circle cx="36" cy="17.5" r="9" fill="url(#mnrHalo{{ idsuffix }})"/>
+  <circle cx="36" cy="17.5" r="3.3" fill="#FFF4D6"/>
+  <!-- dome + finial -->
+  <path d="M30 12.5 a6 6 0 0 1 12 0 Z" fill="url(#mnrTower{{ idsuffix }})"/>
+  <rect x="34.6" y="4.5" width="2.8" height="5" rx="1.4" fill="url(#mnrTower{{ idsuffix }})"/>
+  <circle cx="36" cy="3.4" r="2" fill="url(#mnrTower{{ idsuffix }})"/>
+</svg>
+{%- endmacro %}
+
+{% macro loader() -%}
+<div class="mnr-loader" id="mnrLoader">
+  <div class="mnr-loader-box">
+    <div class="mnr-beacon">
+      <span class="mnr-beam"></span>
+      <span class="mnr-glow"></span>
+      {{ beaconGradient(74, 'load') }}
+    </div>
+    <div class="mnr-load-name">المنارة</div>
+    <div class="mnr-dots"><i></i><i></i><i></i></div>
+  </div>
+</div>
+<script>
+(function(){
+  window.__mnrHideLoader=function(){var l=document.getElementById('mnrLoader');if(l)l.classList.add('hidden');};
+  var t0=Date.now();
+  window.addEventListener('load',function(){
+    if(!window.__mnrManualLoader){
+      setTimeout(window.__mnrHideLoader, Math.max(0,500-(Date.now()-t0)));
+    }
+  });
+})();
+</script>
+{%- endmacro %}

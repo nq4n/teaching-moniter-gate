@@ -1,6 +1,6 @@
 """
-منار — تحليلات تقدّم الطلاب
-Meridian — Student Progress Analytics
+المنارة — تحليلات تقدّم الطلاب
+Al-Manarah — Student Progress Analytics
 
 Privacy-first: the database stores NO student names. Teachers enter scores in
 bulk per section + measurement tool; every view is aggregate-only.
@@ -16,9 +16,10 @@ from flask_login import (
     login_required, current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import os
 import re
+import statistics
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -55,6 +56,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     school = db.Column(db.String(200), default="مدرسة")
     is_admin = db.Column(db.Boolean, default=False)
+    term_name = db.Column(db.String(120), default="الفصل الدراسي الأول 2026/2027")
+    term_start = db.Column(db.Date)   # week 1 Sunday; defaults applied at read time
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     grades = db.relationship("Grade", cascade="all, delete-orphan", backref="user")
@@ -94,8 +97,12 @@ class Tool(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     grade_id = db.Column(db.Integer, db.ForeignKey("grade.id"), nullable=False, index=True)
     name = db.Column(db.String(150), nullable=False)
-    kind = db.Column(db.String(40), default="تكويني")  # تكويني/ختامي/أدائي/تطبيقي
+    kind = db.Column(db.String(40), default="سؤال قصير")  # سؤال قصير/اختبار قصير/اختبار عملي/نشاط عملي/مشروع/مناقشة
     max_score = db.Column(db.Float, default=100.0)
+    weight = db.Column(db.Float)          # relative weight toward the final grade (%), nullable
+    lesson = db.Column(db.String(300))    # the unit / lesson this tool measures
+    week = db.Column(db.Integer)          # planned curriculum week
+    applied_date = db.Column(db.Date)     # when the assessment ACTUALLY took place (overrides week)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     entries = db.relationship("ScoreEntry", cascade="all, delete-orphan", backref="tool")
@@ -142,6 +149,54 @@ def difficulty_label(avg):
     if avg >= 60:
         return "متوسط"
     return "صعب"
+
+
+# ── Academic calendar (MoE 2026/2027, الفصل الدراسي الأول) ──
+DEFAULT_TERM_START = date(2026, 9, 6)   # week 1, Sunday
+TERM_WEEKS = 15
+# Fixed MoE dates for this term (name, start, end)
+HOLIDAYS = [
+    ("إجازة اليوم الوطني", date(2026, 11, 18), date(2026, 11, 19)),
+]
+EXAM_PERIOD = ("فترة امتحانات نهاية الفصل", date(2026, 12, 20), date(2027, 1, 21))
+
+
+def term_start_of(user):
+    return user.term_start or DEFAULT_TERM_START
+
+
+def week_start(user, week):
+    """Sunday date of a curriculum week (1-based)."""
+    if not week:
+        return None
+    return term_start_of(user) + timedelta(days=(week - 1) * 7)
+
+
+def week_range(user, week):
+    s = week_start(user, week)
+    if not s:
+        return None
+    return {"start": s.isoformat(), "end": (s + timedelta(days=4)).isoformat()}
+
+
+def tool_date(user, t):
+    """Actual applied date if set, else the planned week's Sunday."""
+    if t.applied_date:
+        return t.applied_date
+    return week_start(user, t.week)
+
+
+def iso(d):
+    return d.isoformat() if d else None
+
+
+def parse_date(v):
+    if not v:
+        return None
+    try:
+        return date.fromisoformat(str(v)[:10])
+    except (ValueError, TypeError):
+        return None
 
 
 def _grades_for_user():
@@ -239,6 +294,13 @@ def dashboard():
                            school=current_user.school)
 
 
+@app.route("/setup")
+@login_required
+def setup_page():
+    return render_template("setup.html", username=current_user.username,
+                           school=current_user.school)
+
+
 @app.route("/entry")
 @login_required
 def entry():
@@ -265,18 +327,124 @@ def structure():
                 for s in g.sections
             ],
             "tools": [
-                {"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score}
-                for t in g.tools
+                {"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score,
+                 "weight": t.weight, "lesson": t.lesson, "week": t.week,
+                 "applied_date": iso(t.applied_date),
+                 "date": iso(tool_date(current_user, t)),
+                 "recorded": bool(t.entries)}
+                for t in sorted(g.tools, key=lambda x: (tool_date(current_user, x) or date.max))
             ],
         })
     return jsonify(out)
 
 
-DEFAULT_TOOLS = [
-    ("الاختبار التشخيصي", "تكويني"),
-    ("اختبار الوحدة", "ختامي"),
-    ("المشروع", "أدائي"),
-]
+# Real measurement tools per grade level. Lessons/weeks come from the Ministry
+# semester plan (الخطط الفصلية); marks (weight = max_score) come from the
+# official assessment document (وثيقة التقويم — توزيع الدرجات), so each grade's
+# tools sum to 100. الحوار (Dialogue) is continuous (no fixed week) for grades
+# 5–10; الامتحان النهائي (Final Exam) is end-of-term for grades 11–12.
+# Each tuple: (name, week, lesson, mark).
+_DIALOGUE = ("الحوار", None, "تقويم مستمر — يُرصد مرتين في الفصل (10 لكل مرة)", 20)
+_FINAL = ("الامتحان النهائي", None, "نهاية الفصل الدراسي", 40)
+
+GRADE_TOOLS = {
+    5: [
+        _DIALOGUE,
+        ("سؤال قصير 1", 2, "أساسيات الحاسوب — الملفات والمجلدات", 5),
+        ("سؤال قصير 2", 4, "أساسيات الحاسوب — ضبط إعدادات الحاسوب", 5),
+        ("سؤال قصير 3", 6, "معالجة الكلمات — تنسيق الفقرة", 5),
+        ("نشاط عملي 1", 8, "معالجة الكلمات — الجداول", 20),
+        ("مشروع", 10, "معالجة الكلمات — المشروع", 20),
+        ("سؤال قصير 4", 12, "الإنترنت — استكشاف الذكاء الاصطناعي", 5),
+        ("نشاط عملي 2", 13, "الإنترنت — تنسيق وإدارة البريد الإلكتروني", 20),
+    ],
+    6: [
+        _DIALOGUE,
+        ("سؤال قصير 1", 2, "الجداول الحسابية — إجراء العمليات الحسابية", 5),
+        ("نشاط عملي 1", 4, "الجداول الحسابية — تنظيم البيانات", 20),
+        ("سؤال قصير 2", 6, "النمذجة ثلاثية الأبعاد — مقدمة", 5),
+        ("نشاط عملي 2", 9, "النمذجة ثلاثية الأبعاد — تصميم بيت الطيور", 20),
+        ("مشروع", 11, "النمذجة ثلاثية الأبعاد — المشروع", 20),
+        ("سؤال قصير 3", 12, "الشبكات وأدوات التواصل — الإنترنت", 5),
+        ("سؤال قصير 4", 14, "الشبكات وأدوات التواصل — السلامة الرقمية", 5),
+    ],
+    7: [
+        _DIALOGUE,
+        ("نشاط عملي 1", 3, "تطور التقنية والذكاء الاصطناعي — الذكاء الاصطناعي التوليدي", 20),
+        ("اختبار قصير 1", 6, "الرسوم المعلوماتية وتحرير الصور — مقدمة", 10),
+        ("نشاط عملي 2", 9, "الرسوم المعلوماتية — إنشاء رسوم وتحرير الصور", 20),
+        ("مشروع", 11, "الرسوم المعلوماتية — المشروع", 20),
+        ("اختبار قصير 2", 14, "الشبكات والمواطنة الرقمية — المواطنة الرقمية", 10),
+    ],
+    8: [
+        _DIALOGUE,
+        ("نشاط عملي 1", 3, "تنظيم البيانات ومشاركتها — تحليل البيانات", 20),
+        ("اختبار قصير 1", 5, "تنظيم البيانات ومشاركتها — المشروع", 10),
+        ("نشاط عملي 2", 8, "البرمجة النصية — إدخال البيانات", 20),
+        ("مشروع", 11, "البرمجة النصية — المشروع", 20),
+        ("اختبار قصير 2", 14, "التجارة الإلكترونية والأمن الرقمي — البصمة الرقمية", 10),
+    ],
+    9: [
+        _DIALOGUE,
+        ("نشاط عملي 1", 5, "قواعد البيانات — تصميم النماذج", 20),
+        ("مشروع", 10, "قواعد البيانات — المشروع", 20),
+        ("اختبار قصير", 12, "الشبكات — مقدمة في شبكات الحاسوب", 20),
+        ("نشاط عملي 2", 14, "الشبكات — الربط بين الشبكات", 20),
+    ],
+    10: [
+        _DIALOGUE,
+        ("نشاط عملي 1", 6, "تصميم صفحات الويب — تصميم موقع ويب", 20),
+        ("نشاط عملي 2", 10, "تصميم صفحات الويب — عناصر HTML", 20),
+        ("اختبار قصير", 13, "تصميم صفحات الويب — تحسين المظهر", 20),
+        ("مشروع", 15, "تصميم صفحات الويب — المشروع", 20),
+    ],
+    11: [
+        ("نشاط عملي 1", 3, "التقنية في حياتنا — تعلّم الآلة", 10),
+        ("اختبار قصير", 5, "التقنية في حياتنا — التقنيات الناشئة", 10),
+        ("نشاط عملي 2", 8, "وثائق ونماذج الأعمال — استطلاع رضا العملاء", 10),
+        ("اختبار عملي", 10, "وثائق ونماذج الأعمال — المراجع وجدول المحتويات", 10),
+        ("مشروع", 11, "المشاريع — عرض تقديمي", 20),
+        _FINAL,
+    ],
+    12: [
+        ("نشاط عملي 1", 3, "إدارة المشاريع — إنشاء مخطط جانت", 10),
+        ("اختبار عملي", 5, "إدارة المشاريع — إدارة الموارد", 10),
+        ("نشاط عملي 2", 9, "التحول الرقمي — تخصيص المتجر الإلكتروني", 10),
+        ("اختبار قصير", 12, "التحول الرقمي — الإعلانات الإلكترونية", 10),
+        ("مشروع", 13, "المشاريع — حملة توعوية", 20),
+        _FINAL,
+    ],
+}
+
+# Fallback for a grade with no known level
+DEFAULT_TOOLS = [("سؤال قصير 1", None, "", 10), ("نشاط عملي 1", None, "", 20), ("مشروع", None, "", 20)]
+
+TOOL_KINDS = ["الحوار", "سؤال قصير", "اختبار قصير", "اختبار عملي", "نشاط عملي", "مشروع", "الامتحان النهائي"]
+
+
+def kind_of(name):
+    n = (name or "").strip()
+    for k in ["الامتحان النهائي", "الحوار", "سؤال قصير", "اختبار عملي",
+              "اختبار قصير", "نشاط عملي", "مشروع", "مناقشة"]:
+        if n.startswith(k):
+            return "الحوار" if k == "مناقشة" else k
+    return "أخرى"
+
+
+def seed_tools(grade, enabled=True):
+    """Create the real curriculum tools for this grade (by level), or defaults.
+
+    Each tool's max_score equals its official mark, so the sum of a student's
+    raw marks across all tools is already out of 100.
+    """
+    if not enabled:
+        return
+    rows = GRADE_TOOLS.get(grade.level, DEFAULT_TOOLS)
+    for name, week, lesson, mark in rows:
+        db.session.add(Tool(
+            grade_id=grade.id, name=name, kind=kind_of(name),
+            max_score=float(mark), weight=float(mark), week=week, lesson=lesson,
+        ))
 
 
 @app.route("/api/setup", methods=["POST"])
@@ -304,9 +472,7 @@ def setup():
             db.session.add(grade)
             db.session.flush()
             created += 1
-            if with_tools:
-                for tname, tkind in DEFAULT_TOOLS:
-                    db.session.add(Tool(grade_id=grade.id, name=tname, kind=tkind))
+            seed_tools(grade, with_tools)
 
         existing = len(grade.sections)
         for i in range(existing, n_sections):
@@ -329,8 +495,7 @@ def create_grade():
     g = Grade(user_id=current_user.id, name=name, level=data.get("level"))
     db.session.add(g)
     db.session.flush()
-    for tname, tkind in DEFAULT_TOOLS:
-        db.session.add(Tool(grade_id=g.id, name=tname, kind=tkind))
+    seed_tools(g, True)
     db.session.commit()
     return jsonify({"id": g.id, "name": g.name}), 201
 
@@ -395,12 +560,18 @@ def add_tool(gid):
     t = Tool(
         grade_id=gid,
         name=name,
-        kind=data.get("kind", "تكويني"),
+        kind=data.get("kind") or kind_of(name),
         max_score=float(data.get("max_score", 100) or 100),
+        weight=(float(data["weight"]) if data.get("weight") not in (None, "") else None),
+        lesson=data.get("lesson"),
+        week=(int(data["week"]) if data.get("week") not in (None, "") else None),
+        applied_date=parse_date(data.get("applied_date")),
     )
     db.session.add(t)
     db.session.commit()
-    return jsonify({"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score}), 201
+    return jsonify({"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score,
+                    "weight": t.weight, "lesson": t.lesson, "week": t.week,
+                    "applied_date": iso(t.applied_date)}), 201
 
 
 @app.route("/api/tools/<int:tid>", methods=["PUT", "DELETE"])
@@ -420,8 +591,18 @@ def tool_detail(tid):
         t.kind = data["kind"]
     if "max_score" in data:
         t.max_score = float(data["max_score"] or 100)
+    if "weight" in data:
+        t.weight = float(data["weight"]) if data["weight"] not in (None, "") else None
+    if "lesson" in data:
+        t.lesson = data["lesson"]
+    if "week" in data:
+        t.week = int(data["week"]) if data["week"] not in (None, "") else None
+    if "applied_date" in data:
+        t.applied_date = parse_date(data["applied_date"])
     db.session.commit()
-    return jsonify({"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score})
+    return jsonify({"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score,
+                    "weight": t.weight, "lesson": t.lesson, "week": t.week,
+                    "applied_date": iso(t.applied_date)})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -445,6 +626,8 @@ def bulk_scores(sid, tid):
 
     data = request.get_json(force=True) or {}
     max_score = float(data.get("max_score", t.max_score) or 100)
+    if data.get("applied_date") not in (None, ""):
+        t.applied_date = parse_date(data.get("applied_date"))
     raw = data.get("scores", "")
     if isinstance(raw, list):
         tokens = [str(x) for x in raw]
@@ -511,6 +694,8 @@ def overview():
     completion = round(min(100, (n / expected) * 100), 1) if expected else 0
     at_risk = round((sum(1 for e in entries if e.percentage < 55) / n) * 100, 1) if n else 0
 
+    pass_rate = round((sum(1 for e in entries if e.percentage >= 50) / n) * 100, 1) if n else 0
+
     dist = {name: 0 for name, _, _ in BANDS}
     for e in entries:
         dist[band_of(e.percentage)] += 1
@@ -525,10 +710,12 @@ def overview():
         "total_students": total_students,
         "total_sections": total_sections,
         "total_grades": len(grades),
+        "total_tools": sum(len(g.tools) for g in grades),
         "total_records": n,
         "average": avg,
         "completion": completion,
         "at_risk": at_risk,
+        "pass_rate": pass_rate,
         "distribution": distribution,
     })
 
@@ -545,15 +732,23 @@ def tools_summary():
     for t in q.all():
         es = t.entries
         n = len(es)
-        avg = round(sum(e.percentage for e in es) / n, 1) if n else 0
+        pcts = [e.percentage for e in es]
+        avg = round(sum(pcts) / n, 1) if n else 0
         students = sum(s.student_count or 0 for s in t.grade.sections)
         completion = round(min(100, (n / students) * 100), 1) if students else 0
         out.append({
             "id": t.id, "name": t.name, "kind": t.kind,
             "grade_id": t.grade_id, "grade_name": t.grade.name,
-            "max_score": t.max_score,
+            "max_score": t.max_score, "weight": t.weight,
+            "lesson": t.lesson, "week": t.week,
+            "applied_date": iso(t.applied_date),
+            "date": iso(tool_date(current_user, t)),
             "submissions": n,
             "average": avg,
+            "min": round(min(pcts), 1) if n else None,
+            "max": round(max(pcts), 1) if n else None,
+            "std": round(statistics.pstdev(pcts), 1) if n > 1 else 0,
+            "pass_rate": round((sum(1 for p in pcts if p >= 50) / n) * 100, 1) if n else 0,
             "completion": completion,
             "difficulty": difficulty_label(avg) if n else "—",
         })
@@ -572,16 +767,147 @@ def grades_progress():
         students = sum(s.student_count or 0 for s in g.sections)
         expected = expected_for_grade(g)
         completion = round(min(100, (n / expected) * 100), 1) if expected else 0
+
+        # weighted average: uses tool weights where every weighted tool has data
+        wsum, wtot = 0.0, 0.0
+        for t in g.tools:
+            if t.weight and t.entries:
+                tavg = sum(e.percentage for e in t.entries) / len(t.entries)
+                wsum += tavg * t.weight
+                wtot += t.weight
+        weighted = round(wsum / wtot, 1) if wtot else None
+
         out.append({
             "id": g.id, "name": g.name, "level": g.level,
             "students": students,
             "sections": len(g.sections),
             "tools": len(g.tools),
             "average": avg,
+            "weighted_average": weighted,
             "completion": completion,
             "records": n,
         })
     return jsonify(out)
+
+
+# ─────────────────────────────────────────────────────────────
+# API — term / calendar
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/term", methods=["GET", "PUT"])
+@login_required
+def term():
+    u = current_user
+    if request.method == "PUT":
+        data = request.get_json(force=True) or {}
+        if "term_name" in data:
+            u.term_name = data["term_name"]
+        if "term_start" in data:
+            u.term_start = parse_date(data["term_start"])
+        db.session.commit()
+    start = term_start_of(u)
+    return jsonify({
+        "term_name": u.term_name or "الفصل الدراسي الأول 2026/2027",
+        "term_start": iso(start),
+        "weeks": TERM_WEEKS,
+        "term_end": iso(start + timedelta(days=(TERM_WEEKS - 1) * 7 + 4)),
+        "holidays": [{"name": h, "start": iso(s), "end": iso(e)} for h, s, e in HOLIDAYS],
+        "exam": {"name": EXAM_PERIOD[0], "start": iso(EXAM_PERIOD[1]), "end": iso(EXAM_PERIOD[2])},
+    })
+
+
+@app.route("/api/calendar")
+@login_required
+def calendar():
+    """Weeks with date ranges, each carrying the tools whose effective date lands in it."""
+    u = current_user
+    tools = Tool.query.join(Grade).filter(Grade.user_id == current_user.id).all()
+    weeks = []
+    for w in range(1, TERM_WEEKS + 1):
+        s = week_start(u, w)
+        e = s + timedelta(days=4)
+        wk_tools = []
+        for t in tools:
+            d = tool_date(u, t)
+            if d and s <= d <= e:
+                wk_tools.append({
+                    "id": t.id, "name": t.name, "kind": t.kind,
+                    "grade": t.grade.name, "grade_id": t.grade_id,
+                    "date": iso(d), "recorded": bool(t.entries),
+                    "moved": bool(t.applied_date and t.week and t.applied_date != week_start(u, t.week)),
+                })
+        hol = [h for h, hs, he in HOLIDAYS if hs <= e and he >= s]
+        weeks.append({
+            "week": w, "start": iso(s), "end": iso(e),
+            "tools": sorted(wk_tools, key=lambda x: x["date"]),
+            "holidays": hol,
+        })
+    return jsonify({
+        "term_name": u.term_name or "الفصل الدراسي الأول 2026/2027",
+        "term_start": iso(term_start_of(u)),
+        "weeks": weeks,
+        "exam": {"name": EXAM_PERIOD[0], "start": iso(EXAM_PERIOD[1]), "end": iso(EXAM_PERIOD[2])},
+    })
+
+
+# ─────────────────────────────────────────────────────────────
+# API — deeper analytics
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/analytics")
+@login_required
+def analytics():
+    grades = _grades_for_user()
+    entries = _all_entries_for_user()
+
+    # average by tool kind
+    by_kind = {}
+    for g in grades:
+        for t in g.tools:
+            for e in t.entries:
+                by_kind.setdefault(t.kind, []).append(e.percentage)
+    kinds = [{"kind": k, "average": round(sum(v) / len(v), 1), "count": len(v)}
+             for k, v in by_kind.items()]
+    kinds.sort(key=lambda x: x["average"], reverse=True)
+
+    # trend by effective week (planned week or week of applied_date)
+    def eff_week(t):
+        if t.applied_date:
+            delta = (t.applied_date - term_start_of(current_user)).days
+            return max(1, delta // 7 + 1)
+        return t.week
+    by_week = {}
+    for g in grades:
+        for t in g.tools:
+            w = eff_week(t)
+            if not w:
+                continue
+            for e in t.entries:
+                by_week.setdefault(w, []).append(e.percentage)
+    trend = [{"week": w, "average": round(sum(by_week[w]) / len(by_week[w]), 1),
+              "count": len(by_week[w])} for w in sorted(by_week)]
+
+    # section comparison across all grades (anonymous section labels with grade)
+    sections = []
+    for g in grades:
+        for s in g.sections:
+            ps = [e.percentage for e in s.entries]
+            if ps:
+                sections.append({
+                    "label": f"{g.name} · {s.name}",
+                    "grade_id": g.id,
+                    "average": round(sum(ps) / len(ps), 1),
+                    "students": s.student_count or 0,
+                    "records": len(ps),
+                })
+    sections.sort(key=lambda x: x["average"], reverse=True)
+
+    return jsonify({
+        "by_kind": kinds,
+        "trend": trend,
+        "sections": sections,
+        "total_records": len(entries),
+    })
 
 
 # ─────────────────────────────────────────────────────────────
@@ -605,9 +931,36 @@ def server_error(e):
 # Startup: create tables + optional seed (runs under gunicorn too)
 # ─────────────────────────────────────────────────────────────
 
+def ensure_columns():
+    """Add newly-introduced columns to existing tables (simple forward migration).
+
+    Safe for SQLite and Postgres: only issues ADD COLUMN for columns not present.
+    """
+    from sqlalchemy import inspect, text
+    insp = inspect(db.engine)
+    wanted = {
+        "user": [("term_name", "VARCHAR(120)"), ("term_start", "DATE")],
+        "tool": [("applied_date", "DATE")],
+    }
+    for table, cols in wanted.items():
+        try:
+            existing = {c["name"] for c in insp.get_columns(table)}
+        except Exception:
+            continue
+        for name, ddl in cols:
+            if name not in existing:
+                try:
+                    with db.engine.begin() as conn:
+                        conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {name} {ddl}'))
+                    print(f"➕ migrated: {table}.{name}")
+                except Exception as exc:
+                    print(f"⚠️ could not add {table}.{name}: {exc}")
+
+
 def init_db():
     with app.app_context():
         db.create_all()
+        ensure_columns()
         admin_user = os.getenv("ADMIN_USERNAME")
         admin_pass = os.getenv("ADMIN_PASSWORD")
         if admin_user and admin_pass and not User.query.filter_by(username=admin_user).first():

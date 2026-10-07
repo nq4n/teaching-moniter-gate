@@ -1,0 +1,126 @@
+/* المنارة — shared logo, loader & motion */
+
+/* ---------- brand mark ---------- */
+.mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(140deg,#2D5BFF,#7A5AF8);
+  display:flex;align-items:center;justify-content:center;flex:0 0 34px;
+  box-shadow:0 3px 10px rgba(45,91,255,.28)}
+.mark svg{display:block}
+
+/* ---------- full-screen loader ---------- */
+.mnr-loader{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+  background:#F4F5F8;transition:opacity .5s ease, visibility .5s ease}
+.mnr-loader.hidden{opacity:0;visibility:hidden}
+.mnr-loader-box{display:flex;flex-direction:column;align-items:center;gap:20px}
+.mnr-beacon{position:relative;width:120px;height:120px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
+.mnr-beacon svg{position:relative;z-index:2;animation:mnrBob 2.6s ease-in-out infinite}
+.mnr-beam{position:absolute;top:14px;left:50%;width:200px;height:200px;z-index:1;
+  transform-origin:50% 12%;
+  background:conic-gradient(from -18deg at 50% 12%, transparent 0deg, rgba(45,91,255,.22) 16deg, rgba(122,90,248,.05) 30deg, transparent 40deg);
+  animation:mnrBeam 3.2s ease-in-out infinite;filter:blur(1px)}
+.mnr-glow{position:absolute;top:16px;left:50%;width:20px;height:20px;transform:translateX(-50%);border-radius:50%;
+  background:radial-gradient(circle,rgba(45,91,255,.55),transparent 70%);animation:mnrPulse 1.6s ease-in-out infinite;z-index:1}
+.mnr-load-name{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;font-weight:700;font-size:24px;color:#15171E;letter-spacing:-.01em}
+.mnr-dots{display:flex;gap:7px}
+.mnr-dots i{width:8px;height:8px;border-radius:50%;background:#2D5BFF;animation:mnrDots 1.2s ease-in-out infinite}
+.mnr-dots i:nth-child(2){animation-delay:.18s;background:#5566F0}
+.mnr-dots i:nth-child(3){animation-delay:.36s;background:#7A5AF8}
+
+@keyframes mnrBeam{0%,100%{transform:rotate(-26deg)}50%{transform:rotate(26deg)}}
+@keyframes mnrPulse{0%,100%{opacity:.5;transform:translateX(-50%) scale(.85)}50%{opacity:1;transform:translateX(-50%) scale(1.25)}}
+@keyframes mnrBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes mnrDots{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-5px)}}
+
+/* ---------- content motion ---------- */
+@keyframes mnrFadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes mnrGrowX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes mnrGrowY{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes mnrPop{0%{opacity:0;transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
+
+.kpi{animation:mnrFadeUp .5s ease both}
+.kpi:nth-child(2){animation-delay:.05s}.kpi:nth-child(3){animation-delay:.1s}.kpi:nth-child(4){animation-delay:.15s}
+.mnr-in{animation:mnrFadeUp .4s ease both}
+.bar>i,.mini>i,.pbar>i{transform-origin:right center;animation:mnrGrowX .7s cubic-bezier(.2,.75,.2,1) both}
+.gbars .col,.trend .col{transform-origin:bottom;animation:mnrGrowY .7s cubic-bezier(.2,.75,.2,1) both}
+.cweek,.tool-item,.sec-item,.grow{animation:mnrFadeUp .35s ease both}
+
+/* ---------- hover / press polish ---------- */
+.kpi,.card{transition:transform .18s ease, box-shadow .18s ease}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(20,22,30,.07)}
+.btn{transition:background .15s ease, transform .08s ease, box-shadow .15s ease}
+.btn:active{transform:translateY(1px)}
+.nav a,.nav button,.chip,.pill,.ctool,.sec-item,.tool-item{transition:background .15s ease,color .15s ease,border-color .15s ease,transform .12s ease}
+.ctool:hover{transform:translateY(-1px)}
+.seg button{transition:background .15s ease,color .15s ease}
+
+/* ---------- skeleton shimmer ---------- */
+.sk{background:linear-gradient(90deg,#EDEFF3 25%,#F6F7F9 37%,#EDEFF3 63%);background-size:400% 100%;
+  animation:mnrShimmer 1.4s ease infinite;border-radius:8px}
+@keyframes mnrShimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+/* warm beacon glow to match the gold light */
+.mnr-glow{background:radial-gradient(circle,rgba(255,216,115,.6),transparent 70%)!important}
+
+/* ---------- refined buttons (scoped so page CSS doesn't win) ---------- */
+.app .btn,.wrap .btn,.auth .btn{
+  background:linear-gradient(135deg,#2D5BFF 0%,#5B46E6 100%);
+  border-radius:12px;font-weight:600;letter-spacing:-.01em;
+  box-shadow:0 4px 14px rgba(45,91,255,.26);}
+.app .btn:hover,.wrap .btn:hover,.auth .btn:hover{
+  transform:translateY(-1px);box-shadow:0 10px 24px rgba(45,91,255,.34);filter:saturate(1.06) brightness(1.02)}
+.app .btn:active,.wrap .btn:active,.auth .btn:active{transform:translateY(0);box-shadow:0 4px 12px rgba(45,91,255,.3)}
+.app .btn.ghost{background:#fff!important;color:#3A4150!important;box-shadow:none!important;border:1px solid #E6E8EE}
+.app .btn.ghost:hover{background:#F7F8FA!important;transform:translateY(-1px);box-shadow:0 4px 12px rgba(20,22,30,.05)!important}
+.app .btn.danger{background:#fff!important;color:#B42318!important;box-shadow:none!important}
+.app .btn.danger:hover{background:#FBECEC!important;box-shadow:none!important}
+.app .btn-lnk,.app .chip{transition:transform .12s ease,box-shadow .15s ease,background .15s ease,border-color .15s ease}
+.app .btn-lnk:hover,.app .chip:hover{transform:translateY(-1px)}
+:focus-visible{outline:2px solid #2D5BFF;outline-offset:2px;border-radius:8px}
+
+/* ---------- nav active accent ---------- */
+.nav a.on,.nav button.on{position:relative}
+.nav a.on::before,.nav button.on::before{content:"";position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);
+  width:3px;height:18px;border-radius:0 3px 3px 0;background:linear-gradient(#5B8CFF,#9570FF)}
+
+/* ---------- card / input polish ---------- */
+.app .card{box-shadow:0 1px 2px rgba(20,22,30,.04)}
+.app .kpi{box-shadow:0 1px 2px rgba(20,22,30,.03)}
+.app input,.app select,.app textarea,.wrap input,.auth input{transition:border-color .15s ease,box-shadow .15s ease,background .15s ease}
+
+/* ---------- auth (login / register) split layout ---------- */
+.auth{display:flex;min-height:100vh}
+.auth .hero{position:relative;flex:1 1 46%;min-width:0;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:48px;
+  background:radial-gradient(120% 85% at 72% 12%, #2a3566 0%, #191d31 46%, #111320 100%);color:#E7EAF3}
+.auth .hero .grid{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1px);background-size:22px 22px;
+  -webkit-mask-image:radial-gradient(85% 70% at 60% 32%,#000 35%,transparent 100%);mask-image:radial-gradient(85% 70% at 60% 32%,#000 35%,transparent 100%)}
+.auth .hero .glow{position:absolute;top:6%;left:50%;width:380px;height:380px;transform:translateX(-50%);
+  background:radial-gradient(circle,rgba(45,91,255,.4),transparent 62%);filter:blur(12px)}
+.auth .hero-content{position:relative;z-index:3;max-width:380px;text-align:center}
+.auth .hero-logo{position:relative;width:170px;height:200px;margin:0 auto 6px;display:flex;align-items:flex-end;justify-content:center}
+.auth .hero-logo svg{position:relative;z-index:2;animation:mnrBob 3s ease-in-out infinite;filter:drop-shadow(0 10px 26px rgba(45,91,255,.3))}
+.auth .hero-logo .beam{position:absolute;top:30px;left:50%;width:320px;height:320px;z-index:1;transform-origin:50% 13%;
+  background:conic-gradient(from -20deg at 50% 13%, transparent 0deg, rgba(140,170,255,.30) 15deg, rgba(255,224,150,.10) 30deg, transparent 44deg);
+  animation:mnrBeam 3.6s ease-in-out infinite;filter:blur(2px)}
+.auth .hero-name{font-size:36px;font-weight:700;letter-spacing:-.02em;margin:4px 0 12px;color:#fff}
+.auth .hero-tag{font-size:14.5px;line-height:1.95;color:#A7AFC6;margin:0 auto 28px;max-width:330px}
+.auth .hero-feats{list-style:none;display:flex;flex-direction:column;gap:12px;text-align:start}
+.auth .hero-feats li{display:flex;align-items:center;gap:12px;font-size:13.5px;color:#D6DBEA;font-weight:500}
+.auth .hero-feats .fi{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);display:flex;align-items:center;justify-content:center;flex:0 0 32px}
+.auth .hero-feats svg{width:16px;height:16px;stroke:#93AAFF;stroke-width:1.9;fill:none}
+.auth .hero-waves{position:absolute;left:0;right:0;bottom:-1px;z-index:1;line-height:0;opacity:.55}
+.auth .hero-waves svg{width:100%;height:auto;display:block}
+
+.auth .form-side{flex:1 1 54%;min-width:0;display:flex;align-items:center;justify-content:center;padding:40px 28px;background:#F4F5F8}
+.auth .mini-brand{display:none;align-items:center;justify-content:center;gap:11px;margin-bottom:24px}
+.auth .mini-brand .name{font-weight:700;font-size:20px;color:#15171E}
+.auth .mini-brand .sub{font-size:11px;color:#8A93A3}
+
+@media (max-width:880px){
+  .auth{flex-direction:column}
+  .auth .hero{display:none}
+  .auth .mini-brand{display:flex}
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .mnr-beam,.mnr-glow,.auth .hero-logo .beam{display:none}
+}

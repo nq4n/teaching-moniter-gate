@@ -1,9 +1,11 @@
 <!DOCTYPE html>
+{% import 'macros.html' as ui %}
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>لوحة التحليلات — منار</title>
+<title>لوحة التحليلات — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
@@ -98,14 +100,40 @@ a{text-decoration:none;color:inherit}
 .empty p{font-size:13.5px;color:#646D7E;margin-bottom:20px;max-width:420px;margin-inline:auto}
 .hide{display:none!important}
 .muted-note{font-size:12.5px;color:#8A93A3}
+.chartwrap{margin-top:10px}
+/* trend bars */
+.trend{display:flex;align-items:flex-end;gap:10px;height:200px;padding-top:10px;border-bottom:1px solid #E6E8EE}
+.trend .tb{flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;justify-content:flex-end;height:100%}
+.trend .tb .v{font-size:11.5px;font-weight:600;direction:ltr}
+.trend .tb .col{width:100%;max-width:34px;border-radius:7px 7px 0 0;background:#2D5BFF;min-height:4px}
+.trend .tb .wk{font-size:11px;color:#8A93A3;direction:ltr}
+/* calendar */
+.cal-weeks{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.cweek{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:start;padding:12px;border:1px solid #EEF0F4;border-radius:12px}
+.cweek.hol{background:#FBF4EC;border-color:#F3E2CC}
+.cweek.exam{background:#FBECEC;border-color:#F3D4D4}
+.cweek .winfo .wn{font-size:13px;font-weight:700}
+.cweek .winfo{min-width:0}
+.cweek .wdate{font-size:11.5px;color:#8A93A3;direction:ltr}
+.cweek .wtag{display:inline-block;margin-top:5px;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:999px}
+.cweek .wtag.h{background:#FBEFE0;color:#AD5E12}
+.cweek .wtag.e{background:#FBECEC;color:#B42318}
+.cweek .wtools{display:flex;flex-wrap:wrap;gap:7px}
+.ctool{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:5px 10px;border-radius:8px;background:#F4F5F8;border:1px solid #EEF0F4}
+.ctool .cg{color:#8A93A3;font-size:11px}
+.ctool .dot{width:7px;height:7px;border-radius:2px;flex:0 0 7px}
+.ctool.moved{border-color:#C9D6FF;background:#F3F6FF}
+.ctool .mv{font-size:10px;color:#2D5BFF;font-weight:600}
+.cweek .none{font-size:12px;color:#B6BDC9}
 </style>
 </head>
 <body>
+{{ ui.loader() }}
 <div class="app">
   <aside class="side">
     <div class="brand">
-      <span class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></span>
-      <span><span class="name">منار</span><br><span class="sub">{{ school }}</span></span>
+      <span class="mark">{{ ui.beacon(18) }}</span>
+      <span><span class="name">المنارة</span><br><span class="sub">{{ school }}</span></span>
     </div>
     <div>
       <div class="navlabel">التحليل</div>
@@ -113,12 +141,15 @@ a{text-decoration:none;color:inherit}
         <button class="on" data-tab="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>نظرة عامة</button>
         <button data-tab="tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 3H8z"/><rect x="4" y="6" width="16" height="15" rx="2"/><path d="M9 12h6M9 16h4"/></svg>أدوات القياس</button>
         <button data-tab="grades"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5M15 20c0-2.2 1.3-3.6 3-3.6"/></svg>تقدّم الصفوف</button>
+        <button data-tab="analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M8 16v-4M12 16V8M16 16v-6M20 16v-9"/></svg>تحليلات معمّقة</button>
+        <button data-tab="calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>التقويم</button>
       </nav>
     </div>
     <div>
       <div class="navlabel">البيانات</div>
       <nav class="nav">
-        <a href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>إدخال البيانات</a>
+        <a href="{{ url_for('setup_page') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>إعداد الصفوف</a>
+        <a href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>تسجيل الدرجات</a>
       </nav>
     </div>
     <div class="foot">
@@ -136,14 +167,14 @@ a{text-decoration:none;color:inherit}
       </div>
       <span class="sp"></span>
       <span class="chip privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>بيانات تجميعية فقط · دون أسماء</span>
-      <a class="btn" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>إدخال سريع</a>
+      <a class="btn" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>تسجيل الدرجات</a>
     </header>
 
     <div class="body" id="body">
       <div id="empty" class="empty hide">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-4 4"/></svg></div>
-        <h2>لا توجد بيانات بعد</h2>
-        <p>ابدأ بإعداد الصفوف والشُعب ثم أدخل الدرجات دفعةً واحدة. ستظهر التحليلات هنا تلقائيًا.</p>
+        <h2>لا توجد درجات بعد</h2>
+        <p>ابدأ بإعداد صفوفك وشُعبك، ثم سجّل درجات كل أداة قياس عند تنفيذها خلال الفصل. ستظهر التحليلات هنا تلقائيًا كلما أدخلت بيانات.</p>
         <a class="btn" style="width:fit-content;margin-inline:auto" href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>ابدأ الإدخال</a>
       </div>
 
@@ -189,9 +220,43 @@ a{text-decoration:none;color:inherit}
           <div class="hd"><h3>ملخص الصفوف</h3><span class="meta">إحصاءات تجميعية — لا سجلات فردية</span></div>
           <div style="overflow-x:auto">
             <table class="tbl" id="grades-tbl"><thead>
-              <tr><th>الصف</th><th class="num">الطلاب</th><th class="num">الشُعب</th><th class="num">الأدوات</th><th class="num">متوسط الإتقان</th><th class="num">الإكمال</th></tr>
+              <tr><th>الصف</th><th class="num">الطلاب</th><th class="num">الشُعب</th><th class="num">الأدوات</th><th class="num">متوسط الإتقان</th><th class="num">المعدّل الموزون</th><th class="num">الإكمال</th></tr>
             </thead><tbody></tbody></table>
           </div>
+        </div>
+      </section>
+
+      <!-- ANALYTICS -->
+      <section id="tab-analytics" data-panel class="hide">
+        <div class="kpis" id="an-kpis"></div>
+        <div class="grid2" style="margin-top:22px">
+          <div class="card">
+            <div class="hd"><h3>المتوسط حسب نوع الأداة</h3><span class="meta">عبر كل الصفوف</span></div>
+            <div class="dist" id="an-kinds"></div>
+          </div>
+          <div class="card">
+            <div class="hd"><h3>تطوّر المتوسط عبر الأسابيع</h3><span class="meta">حسب موعد التنفيذ الفعلي</span></div>
+            <div class="chartwrap"><div id="an-trend"></div></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:22px">
+          <div class="hd"><h3>مقارنة الشُعب</h3><span class="meta">متوسط كل شعبة — مجهّلة</span></div>
+          <div class="dist" id="an-sections"></div>
+        </div>
+      </section>
+
+      <!-- CALENDAR -->
+      <section id="tab-calendar" data-panel class="hide">
+        <div class="card">
+          <div class="hd">
+            <h3 id="cal-term">التقويم الدراسي</h3>
+            <div style="display:flex;align-items:center;gap:10px">
+              <label style="margin:0;font-size:12.5px">بداية الفصل</label>
+              <input type="date" id="cal-start" class="sel" style="direction:ltr" onchange="saveTermStart()">
+            </div>
+          </div>
+          <p class="meta" id="cal-range" style="margin-bottom:6px"></p>
+          <div id="cal-weeks" class="cal-weeks"></div>
         </div>
       </section>
     </div>
@@ -208,10 +273,12 @@ let STRUCTURE = [];
 document.querySelectorAll('.nav button[data-tab]').forEach(b => {
   b.addEventListener('click', () => switchTab(b.dataset.tab, b));
 });
-const TITLES = {overview:'نظرة عامة', tools:'أدوات القياس', grades:'تقدّم الصفوف'};
+const TITLES = {overview:'نظرة عامة', tools:'أدوات القياس', grades:'تقدّم الصفوف', analytics:'تحليلات معمّقة', calendar:'التقويم'};
 function switchTab(tab, btn){
   document.querySelectorAll('[data-panel]').forEach(p => p.classList.add('hide'));
-  el('tab-'+tab).classList.remove('hide');
+  const panel = el('tab-'+tab);
+  panel.classList.remove('hide');
+  panel.classList.remove('mnr-in'); void panel.offsetWidth; panel.classList.add('mnr-in');
   document.querySelectorAll('.nav button[data-tab]').forEach(x => x.classList.remove('on'));
   (btn || document.querySelector(`.nav button[data-tab="${tab}"]`)).classList.add('on');
   el('page-title').textContent = TITLES[tab];
@@ -222,15 +289,18 @@ function kpi(lab, val, unit, cap){
 }
 
 async function load(){
-  const [ov, tools, grades, structure] = await Promise.all([
-    api('/api/overview'), api('/api/tools'), api('/api/grades-progress'), api('/api/structure')
-  ]).catch(() => [null,null,null,null]);
+  const [ov, tools, grades, structure, an, cal, term] = await Promise.all([
+    api('/api/overview'), api('/api/tools'), api('/api/grades-progress'), api('/api/structure'),
+    api('/api/analytics'), api('/api/calendar'), api('/api/term')
+  ]).catch(() => [null,null,null,null,null,null,null]);
   STRUCTURE = structure || [];
 
   const hasData = ov && (ov.total_records > 0 || ov.total_students > 0);
   if(!hasData){
     el('empty').classList.remove('hide');
     document.querySelectorAll('[data-panel]').forEach(p => p.classList.add('hide'));
+    renderCalendar(cal, term);   // still allow viewing the schedule
+    if(window.__mnrHideLoader) window.__mnrHideLoader();
     return;
   }
   el('empty').classList.add('hide');
@@ -260,6 +330,65 @@ async function load(){
   renderTools(tools || []);
   renderGrades(grades || []);
   buildToolFilter();
+  renderAnalytics(an || {});
+  renderCalendar(cal, term);
+  if(window.__mnrHideLoader) window.__mnrHideLoader();
+}
+
+function renderAnalytics(an){
+  const kinds = an.by_kind || [];
+  const trend = an.trend || [];
+  const sections = an.sections || [];
+  const best = kinds[0], worst = kinds[kinds.length-1];
+  el('an-kpis').innerHTML =
+    kpi('أنواع الأدوات', kinds.length, '', 'نوع قيد القياس') +
+    kpi('أعلى نوع', best?best.average+'%':'—', '', best?best.kind:'') +
+    kpi('أدنى نوع', worst&&kinds.length>1?worst.average+'%':'—', '', worst&&kinds.length>1?worst.kind:'') +
+    kpi('عدد الشُعب المقيسة', sections.length, '', 'بها درجات');
+
+  el('an-kinds').innerHTML = kinds.length ? kinds.map(k => `
+    <div class="drow"><div class="l"><span>${k.kind}</span><span class="v"><b>${k.average}%</b> · <span class="ltr">${k.count}</span></span></div>
+    <div class="bar"><i style="width:${k.average}%;background:${colorForKind(k.kind)}"></i></div></div>`).join('')
+    : '<span class="muted-note">لا بيانات بعد</span>';
+
+  const tmax = Math.max(100, ...trend.map(t=>t.average));
+  el('an-trend').innerHTML = trend.length ? `<div class="trend">${trend.map(t=>`
+    <div class="tb"><span class="v">${t.average}%</span><div class="col" style="height:${(t.average/tmax)*100}%"></div><span class="wk">أ ${t.week}</span></div>`).join('')}</div>`
+    : '<span class="muted-note">لا بيانات بعد — ستظهر مع تسجيل الدرجات</span>';
+
+  el('an-sections').innerHTML = sections.length ? sections.map(s => `
+    <div class="drow"><div class="l"><span>${s.label}</span><span class="v"><b>${s.average}%</b> · <span class="ltr">${s.students}</span> طالب</span></div>
+    <div class="bar"><i style="width:${s.average}%;background:${s.average<70?'#D9822B':(s.average>=85?'#0F9488':'#2D5BFF')}"></i></div></div>`).join('')
+    : '<span class="muted-note">لا بيانات بعد</span>';
+}
+
+const MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+function fmt(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00'); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; }
+function renderCalendar(cal, term){
+  if(!cal) return;
+  el('cal-term').textContent = cal.term_name || 'التقويم الدراسي';
+  if(term){ el('cal-start').value = term.term_start || '';
+    el('cal-range').textContent = `من ${fmt(term.term_start)} إلى ${fmt(term.term_end)} · ${term.weeks} أسبوعًا · ${cal.exam?('امتحانات: '+fmt(cal.exam.start)+' — '+fmt(cal.exam.end)):''}`; }
+  const examS = cal.exam?cal.exam.start:null, examE = cal.exam?cal.exam.end:null;
+  el('cal-weeks').innerHTML = (cal.weeks||[]).map(w => {
+    const isExam = examS && w.start<=examE && w.end>=examS;
+    const hol = (w.holidays||[]).length;
+    const cls = hol?'hol':(isExam?'exam':'');
+    const tags = (w.holidays||[]).map(h=>`<span class="wtag h">${h}</span>`).join('') + (isExam?'<span class="wtag e">امتحانات</span>':'');
+    const tools = (w.tools||[]).map(t=>`<span class="ctool ${t.moved?'moved':''}"><span class="dot" style="background:${colorForKind(t.kind)}"></span>${t.name} <span class="cg">${t.grade}</span>${t.moved?'<span class="mv">↔ مُنقول</span>':''}${t.recorded?' ✓':''}</span>`).join('');
+    return `<div class="cweek ${cls}">
+      <div class="winfo"><div class="wn">الأسبوع ${w.week}</div><div class="wdate">${fmt(w.start)} — ${fmt(w.end)}</div>${tags}</div>
+      <div class="wtools">${tools||'<span class="none">لا أدوات مجدولة</span>'}</div>
+    </div>`;
+  }).join('');
+}
+
+async function saveTermStart(){
+  const v = el('cal-start').value;
+  if(!v) return;
+  await fetch('/api/term',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({term_start:v})});
+  const [cal, term] = await Promise.all([api('/api/calendar'), api('/api/term')]);
+  renderCalendar(cal, term);
 }
 
 function kindBadge(kind){
@@ -280,9 +409,9 @@ function drawToolRows(tools){
   const tb = el('tools-tbl').querySelector('tbody');
   tb.innerHTML = tools.map(t => `
     <tr>
-      <td><span class="tag"><span class="dot" style="background:${colorForKind(t.kind)}"></span>${t.name}</span></td>
+      <td><span class="tag"><span class="dot" style="background:${colorForKind(t.kind)}"></span>${t.name}</span>${t.lesson?`<div style="font-size:11.5px;color:#9AA2B0;margin-top:3px">${t.lesson}</div>`:''}</td>
       <td style="color:#646D7E">${t.grade_name}</td>
-      <td>${kindBadge(t.kind)}</td>
+      <td>${kindBadge(t.kind)}${t.weight!=null?`<span class="pill-k" style="margin-inline-start:6px">· ${t.weight}%</span>`:''}</td>
       <td class="num">${t.submissions.toLocaleString('en')}</td>
       <td class="num">${t.submissions? t.average+'%' : '—'}</td>
       <td class="num"><span class="mini"><i style="width:${t.completion}%"></i></span>${t.completion}%</td>
@@ -291,7 +420,7 @@ function drawToolRows(tools){
   el('tools-empty').textContent = tools.length ? '' : 'لا توجد أدوات بعد — أضِفها من صفحة الإدخال.';
 }
 function colorForKind(k){
-  return {'تكويني':'#2D5BFF','ختامي':'#0F9488','أدائي':'#D9822B','تطبيقي':'#7A5AF8'}[k] || '#2D5BFF';
+  return {'الحوار':'#C2410C','سؤال قصير':'#2D5BFF','اختبار قصير':'#0F9488','اختبار عملي':'#12835A','نشاط عملي':'#D9822B','مشروع':'#7A5AF8','الامتحان النهائي':'#1E293B'}[k] || '#2D5BFF';
 }
 function buildToolFilter(){
   const sel = el('tool-grade-filter');
@@ -321,11 +450,16 @@ function renderGrades(grades){
       <td class="num">${g.sections}</td>
       <td class="num">${g.tools}</td>
       <td class="num">${g.records? g.average+'%' : '—'}</td>
+      <td class="num">${g.weighted_average!=null? g.weighted_average+'%' : '—'}</td>
       <td class="num">${g.completion}%</td>
     </tr>`).join('');
 }
 
-load();
+window.__mnrManualLoader = true;
+load().then(() => {
+  const tab = new URLSearchParams(location.search).get('tab');
+  if(tab && TITLES[tab]) switchTab(tab);
+});
 </script>
 </body>
 </html>
