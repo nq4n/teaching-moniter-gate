@@ -72,6 +72,25 @@ textarea{width:100%;min-height:140px;padding:12px 14px;font-size:15px;line-heigh
 .tp{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid #E6E8EE;border-radius:10px;cursor:pointer;font-size:13px;font-weight:500;background:#fff}
 .tp:hover{background:#F7F8FA}.tp.on{border-color:#2D5BFF;background:#F3F6FF;color:#15171E;box-shadow:0 0 0 2px rgba(45,91,255,.1)}
 .tp .dot{width:8px;height:8px;border-radius:3px;flex:0 0 8px}.tp.on .chk{color:#2D5BFF}
+.modes{display:inline-flex;gap:4px;background:#F0F2F6;border:1px solid #E6E8EE;border-radius:12px;padding:4px;margin-bottom:18px}
+.modes button{height:36px;padding:0 16px;border:none;background:transparent;border-radius:9px;font:inherit;font-size:13.5px;font-weight:600;color:#646D7E;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.modes button svg{width:16px;height:16px;stroke-width:1.9}
+.modes button.on{background:#fff;color:#15171E;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.drop{border:2px dashed #CBD2DE;border-radius:14px;padding:26px;text-align:center;background:#FAFBFC;transition:.15s;cursor:pointer}
+.drop:hover,.drop.drag{border-color:#2D5BFF;background:#F3F6FF}
+.drop svg{width:34px;height:34px;color:#8A93A3;stroke-width:1.6;margin-bottom:8px}
+.drop .t{font-weight:600;font-size:14px;color:#3A4150}.drop .s{font-size:12.5px;color:#8A93A3;margin-top:4px}
+.drop.has{border-style:solid;border-color:#0F9488;background:#F0FBF9}
+.prev{margin-top:18px;border:1px solid #E6E8EE;border-radius:12px;overflow:hidden;display:none}
+.prev.show{display:block}
+.prev table{width:100%;border-collapse:collapse;font-size:13px}
+.prev th,.prev td{padding:9px 12px;text-align:right;border-bottom:1px solid #F0F2F6}
+.prev th{background:#F7F8FA;font-weight:600;color:#3A4150;font-size:12px}
+.prev td.num{direction:ltr;text-align:center;font-variant-numeric:tabular-nums}
+.prev tr:last-child td{border-bottom:none}
+.prev .warn{color:#B42318;font-weight:600}.prev .okc{color:#0C7266;font-weight:600}
+.prev-note{padding:11px 14px;font-size:12.5px;background:#FFF8EC;color:#8A5A00;border-top:1px solid #F0E6CC}
+.prev-note.bad{background:#FBECEC;color:#B42318;border-top-color:#F3D4D4}
 </style>
 </head>
 <body>
@@ -123,10 +142,16 @@ textarea{width:100%;min-height:140px;padding:12px 14px;font-size:15px;line-heigh
         <p class="lead">عند تنفيذ أداة قياس خلال الفصل، اختر الصف والأداة والشعبة، حدّد تاريخ التنفيذ الفعلي، ثم أدخل الدرجات.</p>
         <div class="pickers">
           <div><label>الصف</label><select id="r-grade" onchange="onRecGrade()" style="width:100%"></select></div>
-          <div><label>الشعبة</label><select id="r-section" onchange="refreshSaved()" style="width:100%"></select></div>
+          <div><label>الشعبة</label><select id="r-section" onchange="secChanged()" style="width:100%"></select></div>
           <div><label>تاريخ التنفيذ الفعلي</label><input type="date" id="r-date" style="width:100%"></div>
           <div><label>الدرجة العظمى</label><input type="number" id="r-max" value="100" min="1" style="width:100%"></div>
         </div>
+        <div class="modes">
+          <button id="mode-manual" class="on" onclick="setMode('manual')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>إدخال يدوي</button>
+          <button id="mode-upload" onclick="setMode('upload')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>رفع ملف Excel</button>
+        </div>
+
+        <div id="manualPane">
         <label>أداة القياس</label>
         <div class="tool-pick" id="tool-pick"></div>
         <div class="planned" id="planned-note" style="margin-bottom:14px"></div>
@@ -142,6 +167,35 @@ textarea{width:100%;min-height:140px;padding:12px 14px;font-size:15px;line-heigh
           <span class="live" id="saved-live"></span>
           <span class="toast" id="save-toast"></span>
         </div>
+        </div><!-- /manualPane -->
+
+        <div id="uploadPane" style="display:none">
+          <p class="lead" style="margin:0 0 14px 0">ارفع جدول الشعبة كاملًا: عمود لكل أداة، والصفوف أرقام الدرجات فقط (دون أسماء). نزّل القالب لتطابق الأعمدة تمامًا، ثم «افحص» قبل الحفظ.</p>
+          <div style="margin-bottom:14px">
+            <button class="btn ghost sm" onclick="downloadTemplate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M12 3v12M8 11l4 4 4-4M21 21H3"/></svg> نزّل قالب هذه الشعبة (Excel)</button>
+          </div>
+          <input type="file" id="up-file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="onFilePicked()">
+          <div class="drop" id="up-drop" onclick="el('up-file').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>
+            <div class="t" id="up-name">اختر ملف Excel أو CSV — أو أفلته هنا</div>
+            <div class="s">عمود لكل أداة · أرقام فقط · بلا أسماء · يدعم النموذج الوزاري</div>
+          </div>
+
+          <div id="up-sheetrow" style="display:none;margin-top:14px">
+            <label>الورقة (الفصل)</label>
+            <select id="up-sheet" onchange="checkUpload()" style="max-width:320px"></select>
+          </div>
+
+          <div class="prev" id="up-prev"></div>
+
+          <div class="bulk-foot">
+            <button class="btn ghost" id="btn-check" onclick="checkUpload()" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>افحص الملف</button>
+            <button class="btn" id="btn-save-up" onclick="saveUpload()" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>حفظ وتحديث</button>
+            <label class="check"><input type="checkbox" id="up-replace" checked>تحديث: استبدال الدرجات الحالية للشعبة</label>
+            <span class="sp" style="flex:1"></span>
+            <span class="toast" id="up-toast"></span>
+          </div>
+        </div><!-- /uploadPane -->
 
         <div class="tools-mgr">
           <label style="margin-bottom:10px">أدوات هذا الصف</label>
@@ -170,6 +224,7 @@ function onRecGrade(){
   const g=curG();
   el('r-section').innerHTML=g?g.sections.map(s=>`<option value="${s.id}">${s.name} · ${s.student_count} طالب</option>`).join(''):'';
   SELTOOL=g&&g.tools.length?g.tools[0].id:null;
+  if(typeof resetUpload==='function')resetUpload();
   renderToolPick(g);renderToolList(g);applyTool();
 }
 function renderToolPick(g){
@@ -231,6 +286,104 @@ async function reload(){
   onRecGrade();
 }
 async function reloadQuiet(){STRUCTURE=await fetch('/api/structure').then(r=>r.json());}
+// ── Excel / CSV upload mode ──────────────────────────────────
+let UPFILE=null, CHECKED=false;
+function setMode(m){
+  const up=m==='upload';
+  el('mode-manual').classList.toggle('on',!up);
+  el('mode-upload').classList.toggle('on',up);
+  el('manualPane').style.display=up?'none':'';
+  el('uploadPane').style.display=up?'':'none';
+}
+function curSection(){return el('r-section').value;}
+function secChanged(){resetUpload();refreshSaved();}
+function downloadTemplate(){
+  const sid=curSection();
+  if(!sid){toast('up-toast','اختر الصف والشعبة أولًا',false);return;}
+  window.location=`/api/sections/${sid}/template.xlsx`;
+}
+function resetUpload(){CHECKED=false;el('btn-save-up').disabled=true;const p=el('up-prev');p.className='prev';p.innerHTML='';const sr=el('up-sheetrow');if(sr){sr.style.display='none';el('up-sheet').innerHTML='';}}
+function onFilePicked(){
+  const f=el('up-file').files[0]||null;UPFILE=f;resetUpload();
+  const drop=el('up-drop');
+  if(f){el('up-name').textContent=f.name;drop.classList.add('has');el('btn-check').disabled=false;}
+  else{el('up-name').textContent='اختر ملف Excel أو CSV — أو أفلته هنا';drop.classList.remove('has');el('btn-check').disabled=true;}
+}
+(function dnd(){const d=el('up-drop');if(!d)return;
+  ['dragenter','dragover'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('drag');}));
+  ['dragleave','drop'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove('drag');}));
+  d.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f){el('up-file').files=ev.dataTransfer.files;onFilePicked();}});
+})();
+async function sendUpload(commit){
+  const sid=curSection();
+  if(!sid){toast('up-toast','اختر الصف والشعبة',false);return null;}
+  if(!UPFILE){toast('up-toast','اختر ملفًا أولًا',false);return null;}
+  const fd=new FormData();
+  fd.append('file',UPFILE);
+  fd.append('commit',commit?'1':'0');
+  fd.append('replace',el('up-replace').checked?'1':'0');
+  if(el('r-date').value)fd.append('applied_date',el('r-date').value);
+  const sr=el('up-sheetrow');if(sr&&sr.style.display!=='none'&&el('up-sheet').value)fd.append('sheet',el('up-sheet').value);
+  const r=await fetch(`/api/sections/${sid}/import`,{method:'POST',body:fd});
+  if(!r.ok){let m='تعذّرت العملية';try{m=(await r.json()).error||m;}catch(e){}toast('up-toast',m,false);return null;}
+  return await r.json();
+}
+function renderPreview(d,committed){
+  const p=el('up-prev');p.className='prev show';
+  const rows=d.columns.map(c=>{
+    const skipped=c.skipped_nonnumeric+c.skipped_outrange;
+    const warn=skipped>0;
+    return `<tr><td>${c.tool}</td>
+      <td class="num okc">${c.count}</td>
+      <td class="num">${c.avg!=null?c.avg:'—'} / ${c.max_score}</td>
+      <td class="num ${warn?'warn':''}">${skipped||'0'}${c.skipped_outrange?` (خارج المدى: ${c.skipped_outrange})`:''}</td></tr>`;
+  }).join('');
+  let note='';
+  if(!d.columns.length)note=`<div class="prev-note bad">لم يُطابَق أي عمود بأداة. تأكد أن رؤوس الأعمدة هي أسماء الأدوات — نزّل القالب لتطابقها.</div>`;
+  else{
+    const warns=[];
+    if(d.unmatched&&d.unmatched.length)warns.push(`أعمدة غير مطابقة تُجووزت: ${d.unmatched.filter(x=>x).join('، ')}`);
+    const over=d.columns.reduce((s,c)=>s+c.skipped_outrange,0);
+    if(over)warns.push(`${over} قيمة خارج الدرجة العظمى ستُهمَل — تحقق من مطابقة المقياس.`);
+    if(warns.length)note=`<div class="prev-note">${warns.join(' · ')}</div>`;
+  }
+  let info='';
+  if(d.layout==='official'){
+    info=`<div class="prev-note" style="background:#EEF2FF;color:#2D5BFF;border-top:none">تم التعرّف على النموذج الوزاري · الورقة: <b>${d.sheet||''}</b> · ${d.matched_tools} أداة${d.rows?` · ${d.rows} صف`:''}</div>`;
+  }
+  const head=committed
+    ? `<div class="prev-note" style="background:#F0FBF9;color:#0C7266;border-top:none">✓ حُفظت ${d.saved} درجة في ${d.matched_tools} أداة${d.replace?' (مع استبدال القديم)':''}.</div>`
+    : '';
+  p.innerHTML=info+head+`<table><thead><tr><th>الأداة</th><th>عدد الدرجات</th><th>المتوسط</th><th>مُتجاوَز</th></tr></thead><tbody>${rows}</tbody></table>`+note;
+}
+function populateSheets(d){
+  const sr=el('up-sheetrow');if(!sr)return;
+  if(d.sheets&&d.sheets.length>1){
+    const sel=el('up-sheet');
+    if(sel.options.length!==d.sheets.length){
+      sel.innerHTML=d.sheets.map(n=>`<option value="${n}">${n}</option>`).join('');
+    }
+    if(d.sheet)sel.value=d.sheet;
+    sr.style.display='';
+  } else sr.style.display='none';
+}
+async function checkUpload(){
+  const d=await sendUpload(false);if(!d)return;
+  populateSheets(d);
+  renderPreview(d,false);
+  CHECKED=true;
+  el('btn-save-up').disabled=!d.columns.length;
+  toast('up-toast',`فحص: ${d.total_scores} درجة في ${d.matched_tools} أداة جاهزة`);
+}
+async function saveUpload(){
+  if(!CHECKED){toast('up-toast','افحص الملف أولًا',false);return;}
+  const d=await sendUpload(true);if(!d)return;
+  renderPreview(d,true);
+  toast('up-toast',`حُفظت ${d.saved} درجة`);
+  await reloadQuiet();await refreshSaved();
+  resetUpload();UPFILE=null;el('up-file').value='';onFilePicked();
+}
+
 window.__mnrManualLoader=true;
 reload().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
 </script>

@@ -8,7 +8,7 @@ Grades (الصفوف) 5–12, each with its own sections (شُعب) and its own
 measurement tools (أدوات القياس).
 """
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_login import (
@@ -344,12 +344,16 @@ def structure():
 # tools sum to 100. الحوار (Dialogue) is continuous (no fixed week) for grades
 # 5–10; الامتحان النهائي (Final Exam) is end-of-term for grades 11–12.
 # Each tuple: (name, week, lesson, mark).
-_DIALOGUE = ("الحوار", None, "تقويم مستمر — يُرصد مرتين في الفصل (10 لكل مرة)", 20)
+# الحوار is recorded twice per term (10 each) on the official MoE form, so it is
+# two separate columns/tools — matching استمارة تقييم الطالب (الحوار: عمودان × 10).
+_DIALOGUE1 = ("الحوار 1", None, "تقويم مستمر — الرصد الأول (10)", 10)
+_DIALOGUE2 = ("الحوار 2", None, "تقويم مستمر — الرصد الثاني (10)", 10)
 _FINAL = ("الامتحان النهائي", None, "نهاية الفصل الدراسي", 40)
 
 GRADE_TOOLS = {
     5: [
-        _DIALOGUE,
+        _DIALOGUE1,
+        _DIALOGUE2,
         ("سؤال قصير 1", 2, "أساسيات الحاسوب — الملفات والمجلدات", 5),
         ("سؤال قصير 2", 4, "أساسيات الحاسوب — ضبط إعدادات الحاسوب", 5),
         ("سؤال قصير 3", 6, "معالجة الكلمات — تنسيق الفقرة", 5),
@@ -359,7 +363,8 @@ GRADE_TOOLS = {
         ("نشاط عملي 2", 13, "الإنترنت — تنسيق وإدارة البريد الإلكتروني", 20),
     ],
     6: [
-        _DIALOGUE,
+        _DIALOGUE1,
+        _DIALOGUE2,
         ("سؤال قصير 1", 2, "الجداول الحسابية — إجراء العمليات الحسابية", 5),
         ("نشاط عملي 1", 4, "الجداول الحسابية — تنظيم البيانات", 20),
         ("سؤال قصير 2", 6, "النمذجة ثلاثية الأبعاد — مقدمة", 5),
@@ -369,7 +374,8 @@ GRADE_TOOLS = {
         ("سؤال قصير 4", 14, "الشبكات وأدوات التواصل — السلامة الرقمية", 5),
     ],
     7: [
-        _DIALOGUE,
+        _DIALOGUE1,
+        _DIALOGUE2,
         ("نشاط عملي 1", 3, "تطور التقنية والذكاء الاصطناعي — الذكاء الاصطناعي التوليدي", 20),
         ("اختبار قصير 1", 6, "الرسوم المعلوماتية وتحرير الصور — مقدمة", 10),
         ("نشاط عملي 2", 9, "الرسوم المعلوماتية — إنشاء رسوم وتحرير الصور", 20),
@@ -377,7 +383,8 @@ GRADE_TOOLS = {
         ("اختبار قصير 2", 14, "الشبكات والمواطنة الرقمية — المواطنة الرقمية", 10),
     ],
     8: [
-        _DIALOGUE,
+        _DIALOGUE1,
+        _DIALOGUE2,
         ("نشاط عملي 1", 3, "تنظيم البيانات ومشاركتها — تحليل البيانات", 20),
         ("اختبار قصير 1", 5, "تنظيم البيانات ومشاركتها — المشروع", 10),
         ("نشاط عملي 2", 8, "البرمجة النصية — إدخال البيانات", 20),
@@ -385,14 +392,16 @@ GRADE_TOOLS = {
         ("اختبار قصير 2", 14, "التجارة الإلكترونية والأمن الرقمي — البصمة الرقمية", 10),
     ],
     9: [
-        _DIALOGUE,
+        _DIALOGUE1,
+        _DIALOGUE2,
         ("نشاط عملي 1", 5, "قواعد البيانات — تصميم النماذج", 20),
         ("مشروع", 10, "قواعد البيانات — المشروع", 20),
         ("اختبار قصير", 12, "الشبكات — مقدمة في شبكات الحاسوب", 20),
         ("نشاط عملي 2", 14, "الشبكات — الربط بين الشبكات", 20),
     ],
     10: [
-        _DIALOGUE,
+        _DIALOGUE1,
+        _DIALOGUE2,
         ("نشاط عملي 1", 6, "تصميم صفحات الويب — تصميم موقع ويب", 20),
         ("نشاط عملي 2", 10, "تصميم صفحات الويب — عناصر HTML", 20),
         ("اختبار قصير", 13, "تصميم صفحات الويب — تحسين المظهر", 20),
@@ -673,6 +682,389 @@ def get_scores(sid, tid):
         "scores": [r.score for r in rows],
         "max_score": rows[0].max_score if rows else None,
     })
+
+
+# ─────────────────────────────────────────────────────────────
+# API — Excel / CSV whole-section import (check + upload)
+# Teacher uploads a table: one column per measurement tool, rows are the
+# score numbers only (no names). "check" validates without saving; "upload"
+# refreshes (replaces) the section's scores for every matched tool.
+# ─────────────────────────────────────────────────────────────
+
+# Header cells that mean "this column is just a label" and carry no scores.
+IGNORE_HEADERS = {
+    "", "م", "الاسم", "اسم", "الطالب", "name", "no", "no.", "#", "رقم", "الرقم", "t",
+}
+
+
+def _norm(s):
+    return re.sub(r"\s+", " ", str(s).strip()).casefold()
+
+
+def _match_tool(header, tools_by_id, tools_by_name):
+    """Map a header cell to a tool — by numeric id first, then by name."""
+    if header is None:
+        return None
+    raw = str(header).strip()
+    # numeric id (e.g. "12" or "#12")
+    try:
+        tid = int(float(raw.lstrip("#").strip()))
+        if tid in tools_by_id:
+            return tools_by_id[tid]
+    except (ValueError, TypeError):
+        pass
+    key = _norm(raw)
+    key = re.sub(r"\s*\(.*\)\s*$", "", key).strip()  # drop a trailing "(من X)"
+    return tools_by_name.get(key)
+
+
+def _plan_import(section, rows):
+    """Work out which columns map to which tools and tally valid/invalid cells.
+
+    Returns per-column plans (with the parsed values) plus ignored/unmatched
+    header labels. Nothing is written to the database here.
+    """
+    tools = section.grade.tools
+    tools_by_id = {t.id: t for t in tools}
+    tools_by_name = {_norm(t.name): t for t in tools}
+
+    if not rows:
+        return {"columns": [], "ignored": [], "unmatched": [], "rows": 0}
+
+    header, body = rows[0], rows[1:]
+    columns, ignored, unmatched, used = [], [], [], set()
+    for ci, h in enumerate(header):
+        hs = "" if h is None else str(h).strip()
+        base = re.sub(r"\s*\(.*\)\s*$", "", hs).strip()  # drop a "(…)" note
+        if _norm(base) in IGNORE_HEADERS:
+            ignored.append(hs or "(فارغ)")
+            continue
+        t = _match_tool(h, tools_by_id, tools_by_name)
+        if not t or t.id in used:
+            unmatched.append(hs)
+            continue
+        used.add(t.id)
+        maxs = t.max_score or 100
+        valid, bad, over = [], 0, 0
+        for r in body:
+            if ci >= len(r):
+                continue
+            c = r[ci]
+            if c is None or str(c).strip() == "":
+                continue
+            try:
+                v = float(c)
+            except (ValueError, TypeError):
+                bad += 1
+                continue
+            if v < 0 or v > maxs:
+                over += 1
+                continue
+            valid.append(v)
+        columns.append({
+            "col": ci, "tool_id": t.id, "tool": t.name, "max_score": maxs,
+            "count": len(valid), "skipped_nonnumeric": bad, "skipped_outrange": over,
+            "avg": round(sum(valid) / len(valid), 2) if valid else None,
+            "_values": valid,
+        })
+    return {"columns": columns, "ignored": ignored,
+            "unmatched": unmatched, "rows": len(body)}
+
+
+# ── Official MoE form (استمارة تقييم الطالب) auto-detection ──
+# These sheets have a multi-row header: a category row (merged cells like الحوار,
+# الأسئلة القصيرة, الأنشطة العملية), a max-score row beneath it, then numbered
+# student rows. Columns م / اسم الطالب and the computed المجموع / الدرجة الكلية are
+# skipped; each remaining raw column maps to a tool by kind + position.
+
+_NAME_CELL_HINTS = ("اسم الطالب", "إسم الطالب", "اسم الطالبة", "إسم الطالبة")
+_NUM_CELLS = {"م", "رقم", "الرقم", "ت", "#", "رقم الطالب"}
+_COMPUTED_HINTS = ("مجموع", "الدرجة الكلية", "الكلية", "المستوى", "العبارة", "النهائية للمادة")
+
+
+def _kind_from_category(cat):
+    """Map an official category header to one of the app's tool kinds."""
+    n = _norm(cat)
+    if not n or any(h in n for h in _COMPUTED_HINTS):
+        return None
+    if "حوار" in n:
+        return "الحوار"
+    if "نهائي" in n:
+        return "الامتحان النهائي"
+    if "اختبار عملي" in n:
+        return "اختبار عملي"
+    if "اختبار" in n and "قصير" in n:
+        return "اختبار قصير"
+    if "أنشطة" in n or "انشطة" in n or "نشاط" in n:
+        return "نشاط عملي"
+    if "قصير" in n or "أسئلة" in n or "اسئلة" in n or "سؤال" in n:
+        return "سؤال قصير"
+    if "مشروع" in n:
+        return "مشروع"
+    if "عملي" in n:
+        return "نشاط عملي"
+    return None
+
+
+def _as_int(v):
+    try:
+        f = float(v)
+        return int(f) if f == int(f) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _pick_sheet(wb, pref):
+    """Choose which worksheet to import: an explicit name, else the first term
+    sheet (الفصل …), else the active sheet."""
+    if pref and pref in wb.sheetnames:
+        return wb[pref]
+    for nm in wb.sheetnames:
+        if "الفصل" in nm:
+            return wb[nm]
+    return wb.active
+
+
+def _official_header(ws):
+    """Locate the header row + the number/name columns, or return None."""
+    for r in range(1, min(ws.max_row, 20) + 1):
+        name_col = num_col = None
+        for c in range(1, min(ws.max_column, 30) + 1):
+            n = _norm(ws.cell(row=r, column=c).value)
+            if not n:
+                continue
+            if any(h in n for h in ("اسم الطالب", "إسم الطالب", "اسم الطالبة", "إسم الطالبة")) \
+                    or (("طالب" in n) and ("اسم" in n or "إسم" in n)):
+                name_col = c
+            elif n in _NUM_CELLS:
+                num_col = c
+        if name_col:
+            return r, num_col or 1, name_col
+    return None
+
+
+def _plan_official(ws, grade):
+    """Parse an official MoE evaluation sheet. Returns a plan dict (same shape as
+    _plan_import) with extra meta, or None if the sheet is not that layout."""
+    found = _official_header(ws)
+    if not found:
+        return None
+    header_row, num_col, name_col = found
+
+    # column -> category (expanding merged category cells)
+    merged = list(ws.merged_cells.ranges)
+    col_cat = {}
+    for c in range(1, ws.max_column + 1):
+        val = ws.cell(row=header_row, column=c).value
+        if val is None or str(val).strip() == "":
+            for rng in merged:
+                if rng.min_row <= header_row <= rng.max_row and rng.min_col <= c <= rng.max_col:
+                    val = ws.cell(row=rng.min_row, column=rng.min_col).value
+                    break
+        col_cat[c] = val
+
+    # first numbered student row, and the max-score row just above it
+    data_start = None
+    for r in range(header_row + 1, min(ws.max_row, header_row + 8) + 1):
+        if _as_int(ws.cell(row=r, column=num_col).value):
+            data_start = r
+            break
+    if not data_start:
+        return None
+    max_row = data_start - 1 if data_start - 1 > header_row else None
+
+    # student rows (contiguous numbered rows)
+    student_rows = []
+    for r in range(data_start, ws.max_row + 1):
+        if _as_int(ws.cell(row=r, column=num_col).value):
+            student_rows.append(r)
+
+    # raw tool columns (skip identity + computed), with kind + position
+    raw_cols = []
+    for c in range(1, ws.max_column + 1):
+        if c in (num_col, name_col):
+            continue
+        kind = _kind_from_category(col_cat.get(c))
+        if not kind:
+            continue
+        cmax = None
+        if max_row:
+            cmax = _as_int(ws.cell(row=max_row, column=c).value)
+        raw_cols.append({"col": c, "kind": kind, "max": cmax})
+
+    # grade tools grouped by kind, ordered (week, id) → assign by position
+    from collections import defaultdict
+    tools_by_kind = defaultdict(list)
+    for t in sorted(grade.tools, key=lambda x: ((x.week if x.week else 9999), x.id)):
+        tools_by_kind[t.kind].append(t)
+    ordinal = defaultdict(int)
+
+    columns, unmatched, ignored = [], [], []
+    for rc in raw_cols:
+        k = rc["kind"]
+        idx = ordinal[k]
+        ordinal[k] += 1
+        bucket = tools_by_kind.get(k, [])
+        if idx >= len(bucket):
+            unmatched.append("%s #%d" % (k, idx + 1))
+            continue
+        t = bucket[idx]
+        maxs = t.max_score or rc["max"] or 100
+        valid, bad, over = [], 0, 0
+        for r in student_rows:
+            cell = ws.cell(row=r, column=rc["col"]).value
+            if cell is None or str(cell).strip() == "":
+                continue
+            try:
+                v = float(cell)
+            except (ValueError, TypeError):
+                bad += 1
+                continue
+            if v < 0 or v > maxs:
+                over += 1
+                continue
+            valid.append(v)
+        columns.append({
+            "col": rc["col"], "tool_id": t.id, "tool": t.name, "max_score": maxs,
+            "count": len(valid), "skipped_nonnumeric": bad, "skipped_outrange": over,
+            "avg": round(sum(valid) / len(valid), 2) if valid else None,
+            "_values": valid,
+        })
+    return {"columns": columns, "ignored": ignored, "unmatched": unmatched,
+            "rows": len(student_rows), "layout": "official", "students": len(student_rows)}
+
+
+@app.route("/api/sections/<int:sid>/import", methods=["POST"])
+@login_required
+def import_section(sid):
+    """Upload a table of scores for a whole section.
+
+    multipart/form-data: file=<xlsx|csv>, commit=0|1, replace=0|1,
+    applied_date=YYYY-MM-DD, sheet=<name> (optional). commit=0 → preview only.
+    Auto-detects the official MoE form; otherwise treats row 1 as tool headers.
+    """
+    s = Section.query.get_or_404(sid)
+    if s.grade.user_id != current_user.id:
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "لم يُرفع ملف"}), 400
+
+    commit = str(request.form.get("commit", "0")).lower() in ("1", "true", "yes")
+    replace = str(request.form.get("replace", "1")).lower() in ("1", "true", "yes")
+    applied_date = parse_date(request.form.get("applied_date"))
+
+    fname = (f.filename or "").lower()
+    raw = f.read()
+    layout, sheet_used, sheets_avail = "simple", None, []
+    try:
+        if fname.endswith((".xlsx", ".xlsm")):
+            import io
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+            sheets_avail = list(wb.sheetnames)
+            ws = _pick_sheet(wb, request.form.get("sheet"))
+            sheet_used = ws.title
+            plan = _plan_official(ws, s.grade)
+            if plan is None:
+                rows = [list(r) for r in ws.iter_rows(values_only=True)]
+                plan = _plan_import(s, rows)
+            else:
+                layout = "official"
+            wb.close()
+        else:
+            import csv
+            import io
+            text = raw.decode("utf-8-sig", errors="replace")
+            rows = [row for row in csv.reader(io.StringIO(text))]
+            plan = _plan_import(s, rows)
+    except Exception:
+        return jsonify({"error": "تعذّر قراءة الملف — تأكد أنه Excel (.xlsx) أو CSV"}), 400
+
+    public_cols = [{k: v for k, v in c.items() if k != "_values"} for c in plan["columns"]]
+    result = {
+        "check": not commit,
+        "layout": layout,
+        "sheet": sheet_used,
+        "sheets": sheets_avail,
+        "rows": plan["rows"],
+        "ignored": plan["ignored"],
+        "unmatched": plan["unmatched"],
+        "columns": public_cols,
+        "total_scores": sum(c["count"] for c in plan["columns"]),
+        "matched_tools": len(plan["columns"]),
+        "replace": replace,
+    }
+
+    if not commit:
+        return jsonify(result), 200
+
+    saved = 0
+    for c in plan["columns"]:
+        t = Tool.query.get(c["tool_id"])
+        if applied_date:
+            t.applied_date = applied_date
+        if replace:
+            ScoreEntry.query.filter_by(section_id=sid, tool_id=t.id).delete()
+        maxs = c["max_score"]
+        for v in c["_values"]:
+            db.session.add(ScoreEntry(
+                section_id=sid, tool_id=t.id, score=v, max_score=maxs,
+                percentage=round((v / maxs) * 100, 2) if maxs else 0,
+            ))
+            saved += 1
+    db.session.commit()
+    result["saved"] = saved
+    return jsonify(result), 201
+
+
+@app.route("/api/sections/<int:sid>/template.xlsx")
+@login_required
+def section_template(sid):
+    """Download a ready-to-fill Excel template for a section.
+
+    One column per tool (header = tool name, with max score as a cell comment),
+    plus an optional ignored label column. Fill the numbers and upload it back.
+    """
+    s = Section.query.get_or_404(sid)
+    if s.grade.user_id != current_user.id:
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    import io
+    import openpyxl
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الدرجات"
+    ws.sheet_view.rightToLeft = True
+
+    tools = sorted(s.grade.tools, key=lambda x: (tool_date(current_user, x) or date.max))
+    hdr_font = Font(bold=True, color="FFFFFF")
+    hdr_fill = PatternFill("solid", fgColor="2D5BFF")
+
+    a = ws.cell(row=1, column=1, value="الاسم (اختياري — يُتجاهل)")
+    a.font, a.fill = hdr_font, hdr_fill
+    ws.column_dimensions["A"].width = 22
+
+    for j, t in enumerate(tools, start=2):
+        c = ws.cell(row=1, column=j, value=t.name)
+        c.font, c.fill = hdr_font, hdr_fill
+        c.alignment = Alignment(horizontal="center")
+        c.comment = Comment(f"النوع: {t.kind}\nالدرجة العظمى: {t.max_score}", "المنارة")
+        ws.column_dimensions[c.column_letter].width = 16
+
+    ws.freeze_panes = "A2"
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    fname = ("template_%s_%s.xlsx" % (s.grade.name, s.name)).replace(" ", "_")
+    return send_file(
+        bio, as_attachment=True, download_name=fname,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 # ─────────────────────────────────────────────────────────────
