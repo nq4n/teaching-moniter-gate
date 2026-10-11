@@ -26,11 +26,15 @@ load_dotenv()
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
-# ── Database URL (SQLite locally, Postgres on Render/Neon) ──
+# ── Database URL (SQLite locally, Postgres on Render/Supabase) ──
 db_url = os.getenv("DATABASE_URL", "sqlite:///teaching_monitor.db")
-# SQLAlchemy needs the modern scheme; some providers still hand out "postgres://"
+# Some providers still hand out "postgres://"; normalize to "postgresql://".
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
+# Pin the psycopg2 driver explicitly: SQLAlchemy 2.1+ defaults a bare
+# "postgresql://" URL to psycopg (v3), which we don't ship (we use psycopg2-binary).
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
