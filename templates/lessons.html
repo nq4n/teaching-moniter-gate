@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تتبّع الدروس — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.app{display:flex;flex-wrap:wrap;min-height:100vh}
+.side{width:252px;flex:0 0 252px;background:#15171E;color:#C7CCD6;padding:24px 18px;display:flex;flex-direction:column;gap:26px}
+.brand{display:flex;align-items:center;gap:11px;padding:0 6px}
+.brand .name{font-weight:700;color:#fff;font-size:17px}
+.brand .sub{font-size:11px;color:#8A93A3}
+.navlabel{font-size:11px;color:#6B7486;padding:0 10px;margin-bottom:8px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-size:14px;font-weight:500;color:#AEB5C2}
+.nav a:hover{background:#20232D;color:#fff}
+.nav a.on{background:#262A36;color:#fff}
+.nav svg{width:17px;height:17px;flex:0 0 17px;stroke-width:1.9}
+.side .foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#20232D}
+.side .foot .av{width:34px;height:34px;border-radius:50%;background:#394052;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:0 0 34px}
+.side .foot .nm{font-size:13px;color:#fff;font-weight:600}
+.side .foot .rl{font-size:11px;color:#8A93A3}
+.side .foot a{margin-inline-start:auto;color:#8A93A3;display:flex}
+.main{flex:999 1 620px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:22px 34px;border-bottom:1px solid #E6E8EE}
+.top h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.01em}
+.top .crumb{font-size:12.5px;color:#646D7E;margin-bottom:3px}
+.body{padding:26px 34px 48px;display:flex;flex-direction:column;gap:22px;max-width:980px}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:16px;padding:22px 24px}
+.card .hd h3{margin:0;font-size:16px;font-weight:600}
+.card .lead{font-size:13px;color:#646D7E;margin:4px 0 18px}
+label{display:block;font-size:12.5px;font-weight:600;color:#3A4150;margin-bottom:6px}
+input,select{font:inherit;color:#15171E;background:#fff;border:1px solid #E6E8EE;border-radius:10px;height:42px;padding:0 12px;font-size:14px}
+input:focus,select:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3px rgba(45,91,255,.12)}
+input[type=number]{direction:ltr;text-align:center}
+.pickers{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 18px;border-radius:10px;background:#2D5BFF;color:#fff;font:inherit;font-size:14px;font-weight:600;border:none;cursor:pointer}
+.btn:hover{background:#2348cf}.btn.ghost{background:#fff;color:#3A4150;border:1px solid #E6E8EE}.btn.ghost:hover{background:#F4F5F8}.btn.sm{height:36px;padding:0 13px;font-size:13px}.btn.danger{background:#fff;color:#B42318;border:1px solid #F3D4D4}.btn.danger:hover{background:#FBECEC}
+.muted{font-size:12.5px;color:#8A93A3}
+/* progress */
+.prog{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.prog .bar{flex:1;min-width:180px;height:12px;background:#EEF0F5;border-radius:999px;overflow:hidden}
+.prog .fill{height:100%;background:linear-gradient(90deg,#2D5BFF,#0F9488);border-radius:999px;transition:width .35s}
+.prog .pct{font-size:20px;font-weight:700}
+.prog .meta{font-size:13px;color:#646D7E}
+.prog .meta b{color:#15171E}
+/* lessons list */
+.llist{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.lrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #E6E8EE;border-radius:12px;background:#fff}
+.lrow.taught{border-color:#BFE8E0;background:#F3FBF9}
+.lrow.postponed{border-color:#F0DDBD;background:#FFFBF2}
+.lrow .info{flex:1;min-width:0}
+.lrow .t{font-weight:600;font-size:14px}
+.lrow .u{font-size:12px;color:#8A93A3;margin-top:2px}
+.lrow .wk{font-size:11.5px;color:#2D5BFF;font-weight:600;background:#EEF2FF;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.seg{display:inline-flex;border:1px solid #E6E8EE;border-radius:9px;overflow:hidden;flex:0 0 auto}
+.seg button{height:34px;padding:0 11px;border:none;background:#fff;font:inherit;font-size:12.5px;font-weight:600;color:#646D7E;cursor:pointer;border-inline-start:1px solid #E6E8EE}
+.seg button:first-child{border-inline-start:none}
+.seg button.on[data-s="taught"]{background:#0F9488;color:#fff}
+.seg button.on[data-s="planned"]{background:#2D5BFF;color:#fff}
+.seg button.on[data-s="postponed"]{background:#D9822B;color:#fff}
+.del{color:#B42318;background:none;border:none;cursor:pointer;font-size:12.5px;padding:6px}
+.add{display:grid;grid-template-columns:2fr .7fr auto;gap:10px;align-items:end;margin-top:16px;border-top:1px solid #F0F2F6;padding-top:16px}
+.toast{display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:10px}
+.toast.ok{display:inline-flex;background:#E2F5F2;color:#0C7266}.toast.err{display:inline-flex;background:#FBECEC;color:#B42318}
+</style>
+</head>
+<body>
+{{ ui.loader() }}
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <span class="mark">{{ ui.beacon(18) }}</span>
+      <span><span class="name">المنارة</span><br><span class="sub">{{ school }}</span></span>
+    </div>
+    <div>
+      <div class="navlabel">التحليل</div>
+      <nav class="nav">
+        <a href="{{ url_for('dashboard') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>لوحة التحليلات</a>
+      </nav>
+    </div>
+    <div>
+      <div class="navlabel">البيانات</div>
+      <nav class="nav">
+        <a href="{{ url_for('setup_page') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8M4.6 9a1.6 1.6 0 0 0-.3-1.8M12 2v2M12 20v2M5 5l1.5 1.5M17.5 17.5 19 19M2 12h2M20 12h2M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>إعداد الصفوف والشُعب</a>
+        <a href="{{ url_for('entry') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>تسجيل الدرجات</a>
+        <a class="on" href="{{ url_for('lessons_page') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>تتبّع الدروس</a>
+      </nav>
+    </div>
+    <div class="foot">
+      <span class="av">{{ username[0]|upper }}</span>
+      <span><span class="nm">{{ username }}</span><br><span class="rl">معلّم</span></span>
+      <a href="{{ url_for('logout') }}" title="تسجيل الخروج"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg></a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">تابع تقدّم المنهج وعلّم كل درس عند تنفيذه</div><h1>تتبّع الدروس</h1></div>
+    </header>
+
+    <div class="body">
+      <div id="noGrades" class="card" style="display:none;text-align:center;padding:40px">
+        <div style="font-weight:600;font-size:16px;margin-bottom:6px">لا توجد صفوف بعد</div>
+        <p class="muted" style="margin-bottom:18px">هيّئ صفوفك أولًا، وستُضاف دروس المنهج تلقائيًا.</p>
+        <a class="btn" style="display:inline-flex" href="{{ url_for('setup_page') }}">إعداد الصفوف</a>
+      </div>
+
+      <div class="card" id="mainCard">
+        <div class="hd"><h3>دروس المنهج</h3></div>
+        <p class="lead">تُعبّأ الدروس تلقائيًا من المنهج الوزاري لكل صف — علّم كل درس كـ«تم التدريس» عند تنفيذه.</p>
+        <div class="pickers">
+          <div><label>الصف</label><select id="grade" onchange="loadLessons()" style="width:100%"></select></div>
+        </div>
+
+        <div class="prog" style="margin:18px 0 6px">
+          <div class="pct" id="pct">0%</div>
+          <div class="bar"><div class="fill" id="fill" style="width:0%"></div></div>
+          <div class="meta" id="meta"></div>
+          <span class="toast" id="toast"></span>
+        </div>
+
+        <div class="llist" id="llist"></div>
+
+        <div class="add">
+          <div><label>إضافة درس يدويًا</label><input type="text" id="n-title" placeholder="الوحدة — عنوان الدرس" style="width:100%"></div>
+          <div><label>الأسبوع</label><input type="number" id="n-week" min="1" max="20" style="width:100%"></div>
+          <button class="btn ghost sm" onclick="addLesson()">+ درس</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const el=(id)=>document.getElementById(id);
+const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+let STRUCTURE=[];
+function toast(msg,ok=true){const t=el('toast');t.className='toast '+(ok?'ok':'err');t.textContent=msg;setTimeout(()=>{t.className='toast';},3500);}
+function curGid(){return el('grade').value;}
+
+async function loadLessons(){
+  const gid=curGid();if(!gid){return;}
+  const d=await fetch(`/api/grades/${gid}/lessons`).then(r=>r.json());
+  el('pct').textContent=`${d.percent}%`;
+  el('fill').style.width=`${d.percent}%`;
+  el('meta').innerHTML=`<b>${d.taught}</b> من <b>${d.total}</b> درس مُنجز`+(d.postponed?` · ${d.postponed} مؤجّل`:'');
+  const statuses=[['planned','مخطّط'],['taught','تم التدريس'],['postponed','مؤجّل']];
+  el('llist').innerHTML = d.lessons.length ? d.lessons.map(l=>{
+    const wk = l.week ? `أسبوع ${l.week}` : '';
+    const seg = statuses.map(([s,label])=>`<button data-s="${s}" class="${l.status===s?'on':''}" onclick="setStatus(${l.id},'${s}')">${label}</button>`).join('');
+    const dt = l.status==='taught'&&l.taught_date ? `<span class="muted" style="white-space:nowrap">${l.taught_date}</span>` : '';
+    return `<div class="lrow ${l.status}">
+      <div class="info"><div class="t">${l.title}</div>${l.unit?`<div class="u">${l.unit}</div>`:''}</div>
+      ${wk?`<span class="wk">${wk}</span>`:''}
+      ${dt}
+      <div class="seg">${seg}</div>
+      <button class="del" title="حذف" onclick="delLesson(${l.id})">حذف</button>
+    </div>`;
+  }).join('') : '<span class="muted">لا دروس — أضِف درسًا بالأسفل</span>';
+}
+async function setStatus(lid,s){
+  const r=await jreq(`/api/lessons/${lid}`,{status:s},'PUT');
+  if(r.ok){await loadLessons();toast(s==='taught'?'تم تعليم الدرس كمُنجز':'تم التحديث');}
+  else toast('تعذّر التحديث',false);
+}
+async function addLesson(){
+  const gid=curGid();if(!gid){toast('اختر صفًا',false);return;}
+  const title=el('n-title').value.trim();if(!title){toast('اكتب عنوان الدرس',false);return;}
+  const week=el('n-week').value;
+  const r=await jreq(`/api/grades/${gid}/lessons`,{title,week:week||null});
+  if(r.ok){el('n-title').value='';el('n-week').value='';await loadLessons();toast('أُضيف الدرس');}
+  else toast('تعذّرت الإضافة',false);
+}
+async function delLesson(lid){if(!confirm('حذف هذا الدرس؟'))return;const r=await fetch(`/api/lessons/${lid}`,{method:'DELETE'});if(r.ok)await loadLessons();}
+
+async function init(){
+  try{const r=await fetch('/api/structure');STRUCTURE=r.ok?await r.json():[];}catch(e){STRUCTURE=[];}
+  if(!Array.isArray(STRUCTURE))STRUCTURE=[];
+  el('noGrades').style.display=STRUCTURE.length?'none':'block';
+  el('mainCard').style.display=STRUCTURE.length?'block':'none';
+  el('grade').innerHTML=STRUCTURE.map(g=>`<option value="${g.id}">${g.name}</option>`).join('');
+  if(STRUCTURE.length)await loadLessons();
+}
+window.__mnrManualLoader=true;
+init().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+</script>
+</body>
+</html>

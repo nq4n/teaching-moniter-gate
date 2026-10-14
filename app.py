@@ -26,17 +26,37 @@ load_dotenv()
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 
-# ── Database URL (SQLite locally, Postgres on Render/Supabase) ──
-db_url = os.getenv("DATABASE_URL", "sqlite:///teaching_monitor.db")
-# Some providers still hand out "postgres://"; normalize to "postgresql://".
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
-# Pin the psycopg2 driver explicitly: SQLAlchemy 2.1+ defaults a bare
-# "postgresql://" URL to psycopg (v3), which we don't ship (we use psycopg2-binary).
-if db_url.startswith("postgresql://"):
-    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+# ── Database connection ──
+# Order of preference:
+#   1) Discrete PG* vars (PGHOST + PGPASSWORD, …) — SQLAlchemy builds & escapes
+#      the URL, so passwords with any characters work with NO manual encoding.
+#   2) DATABASE_URL — a full connection string.
+#   3) Local SQLite fallback.
+def _build_db_uri():
+    host = os.getenv("PGHOST")
+    pwd = os.getenv("PGPASSWORD")
+    if host and pwd:
+        from sqlalchemy.engine import URL
+        return URL.create(
+            "postgresql+psycopg2",
+            username=os.getenv("PGUSER", "postgres"),
+            password=pwd,
+            host=host,
+            port=int(os.getenv("PGPORT", "5432")),
+            database=os.getenv("PGDATABASE", "postgres"),
+            query={"sslmode": os.getenv("PGSSLMODE", "require")},
+        )
+    url = os.getenv("DATABASE_URL", "sqlite:///teaching_monitor.db")
+    # Some providers still hand out "postgres://"; normalize it.
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    # SQLAlchemy 2.1+ defaults a bare "postgresql://" to psycopg (v3); we ship
+    # psycopg2-binary, so pin that driver explicitly.
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
 
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_DATABASE_URI"] = _build_db_uri()
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-key-change-in-production")
@@ -83,6 +103,7 @@ class Grade(db.Model):
 
     sections = db.relationship("Section", cascade="all, delete-orphan", backref="grade")
     tools = db.relationship("Tool", cascade="all, delete-orphan", backref="grade")
+    lessons = db.relationship("Lesson", cascade="all, delete-orphan", backref="grade")
 
 
 class Section(db.Model):
@@ -120,6 +141,19 @@ class ScoreEntry(db.Model):
     score = db.Column(db.Float, nullable=False)
     max_score = db.Column(db.Float, default=100.0)
     percentage = db.Column(db.Float, nullable=False, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Lesson(db.Model):
+    """درس/وحدة من المنهج — seeded per grade (like tools); teacher marks it taught."""
+    id = db.Column(db.Integer, primary_key=True)
+    grade_id = db.Column(db.Integer, db.ForeignKey("grade.id"), nullable=False, index=True)
+    title = db.Column(db.String(300), nullable=False)   # e.g. "الجداول الحسابية — تنظيم البيانات"
+    unit = db.Column(db.String(200))                     # the unit part before "—"
+    week = db.Column(db.Integer)                         # planned curriculum week
+    status = db.Column(db.String(20), default="planned")  # planned / taught / postponed
+    taught_date = db.Column(db.Date)                     # when it was actually taught
+    order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -312,6 +346,13 @@ def entry():
                            school=current_user.school)
 
 
+@app.route("/lessons")
+@login_required
+def lessons_page():
+    return render_template("lessons.html", username=current_user.username,
+                           school=current_user.school)
+
+
 # ─────────────────────────────────────────────────────────────
 # API — structure (grades / sections / tools)
 # ─────────────────────────────────────────────────────────────
@@ -460,6 +501,29 @@ def seed_tools(grade, enabled=True):
         ))
 
 
+def seed_lessons(grade):
+    """Create curriculum lessons for this grade from the same ministry data the
+    tools use (one row per real lesson/unit), ordered by week. Teacher then marks
+    each as taught. Skips continuous/exam pseudo-lessons and duplicates."""
+    rows = GRADE_TOOLS.get(grade.level, [])
+    seen, items = set(), []
+    for _name, week, lesson, _mark in rows:
+        title = (lesson or "").strip()
+        if not title or "تقويم مستمر" in title or "نهاية الفصل" in title:
+            continue
+        if title in seen:
+            continue
+        seen.add(title)
+        items.append((week, title))
+    items.sort(key=lambda x: (x[0] if x[0] else 9999))
+    for i, (week, title) in enumerate(items):
+        unit = title.split("—")[0].strip() if "—" in title else ""
+        db.session.add(Lesson(
+            grade_id=grade.id, title=title, unit=unit, week=week,
+            status="planned", order=i,
+        ))
+
+
 @app.route("/api/setup", methods=["POST"])
 @login_required
 def setup():
@@ -486,6 +550,8 @@ def setup():
             db.session.flush()
             created += 1
             seed_tools(grade, with_tools)
+            if with_tools:
+                seed_lessons(grade)
 
         existing = len(grade.sections)
         for i in range(existing, n_sections):
@@ -509,6 +575,7 @@ def create_grade():
     db.session.add(g)
     db.session.flush()
     seed_tools(g, True)
+    seed_lessons(g)
     db.session.commit()
     return jsonify({"id": g.id, "name": g.name}), 201
 
@@ -616,6 +683,83 @@ def tool_detail(tid):
     return jsonify({"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score,
                     "weight": t.weight, "lesson": t.lesson, "week": t.week,
                     "applied_date": iso(t.applied_date)})
+
+
+# ─────────────────────────────────────────────────────────────
+# API — lesson tracking (تتبّع الدروس)
+# ─────────────────────────────────────────────────────────────
+
+def _lesson_json(l):
+    return {"id": l.id, "title": l.title, "unit": l.unit, "week": l.week,
+            "status": l.status, "taught_date": iso(l.taught_date), "order": l.order,
+            "week_range": week_range(current_user, l.week)}
+
+
+@app.route("/api/grades/<int:gid>/lessons", methods=["GET", "POST"])
+@login_required
+def grade_lessons(gid):
+    g = Grade.query.get_or_404(gid)
+    if g.user_id != current_user.id:
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    if request.method == "POST":
+        data = request.get_json(force=True) or {}
+        title = (data.get("title") or "").strip()
+        if not title:
+            return jsonify({"error": "عنوان الدرس مطلوب"}), 400
+        unit = (data.get("unit") or (title.split("—")[0].strip() if "—" in title else "")).strip()
+        nxt = (max([l.order for l in g.lessons], default=-1)) + 1
+        l = Lesson(
+            grade_id=gid, title=title, unit=unit,
+            week=(int(data["week"]) if data.get("week") not in (None, "") else None),
+            status=data.get("status") or "planned",
+            taught_date=parse_date(data.get("taught_date")),
+            order=data.get("order", nxt),
+        )
+        db.session.add(l)
+        db.session.commit()
+        return jsonify(_lesson_json(l)), 201
+
+    lessons = sorted(g.lessons, key=lambda x: (x.order, (x.week or 9999), x.id))
+    total = len(lessons)
+    taught = sum(1 for l in lessons if l.status == "taught")
+    return jsonify({
+        "lessons": [_lesson_json(l) for l in lessons],
+        "total": total,
+        "taught": taught,
+        "postponed": sum(1 for l in lessons if l.status == "postponed"),
+        "percent": round((taught / total) * 100, 1) if total else 0,
+    })
+
+
+@app.route("/api/lessons/<int:lid>", methods=["PUT", "DELETE"])
+@login_required
+def lesson_detail(lid):
+    l = Lesson.query.get_or_404(lid)
+    if l.grade.user_id != current_user.id:
+        return jsonify({"error": "غير مصرّح"}), 403
+    if request.method == "DELETE":
+        db.session.delete(l)
+        db.session.commit()
+        return "", 204
+    data = request.get_json(force=True) or {}
+    if "title" in data:
+        l.title = data["title"]
+    if "unit" in data:
+        l.unit = data["unit"]
+    if "week" in data:
+        l.week = int(data["week"]) if data["week"] not in (None, "") else None
+    if "status" in data:
+        l.status = data["status"]
+        # auto-stamp the taught date when marking taught (unless one was supplied)
+        if data["status"] == "taught" and not l.taught_date and "taught_date" not in data:
+            l.taught_date = date.today()
+        if data["status"] != "taught" and "taught_date" not in data:
+            l.taught_date = None
+    if "taught_date" in data:
+        l.taught_date = parse_date(data["taught_date"])
+    db.session.commit()
+    return jsonify(_lesson_json(l))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1353,10 +1497,24 @@ def ensure_columns():
                     print(f"⚠️ could not add {table}.{name}: {exc}")
 
 
+def backfill_lessons():
+    """Seed lessons for any grade that has none yet (grades created before the
+    lesson-tracking feature existed). Idempotent: only touches empty grades."""
+    try:
+        for g in Grade.query.all():
+            if not g.lessons:
+                seed_lessons(g)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f"⚠️ lesson backfill skipped: {exc}")
+
+
 def init_db():
     with app.app_context():
         db.create_all()
         ensure_columns()
+        backfill_lessons()
         admin_user = os.getenv("ADMIN_USERNAME")
         admin_pass = os.getenv("ADMIN_PASSWORD")
         if admin_user and admin_pass and not User.query.filter_by(username=admin_user).first():
