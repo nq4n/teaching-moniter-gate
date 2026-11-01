@@ -108,6 +108,9 @@
               <div><label>الدرجة (نقاط)</label><input type="number" id="n-points" value="1" min="0.25" step="0.25"></div>
             </div>
             <div style="margin-top:14px"><label>نص السؤال</label><textarea id="n-text" rows="2" placeholder="اكتب نص السؤال…"></textarea></div>
+            <div style="margin-top:14px"><label>رابط صورة (اختياري)</label>
+              <input type="url" id="n-img" placeholder="https://…">
+              <span class="muted" style="display:block;margin-top:5px">الصق رابطًا لصورة — المنصة لا تستضيف الملفات، فاستخدم Drive أو موقع المدرسة.</span></div>
 
             <div id="box-mcq" style="margin-top:14px">
               <label>الخيارات — حدّد الإجابة الصحيحة</label>
@@ -246,10 +249,13 @@ async function loadTool(){
     else if(q.qtype==='tf')body=`<div class="opts"><span class="opt ${q.correct==='true'?'ok':''}">صح</span><span class="opt ${q.correct!=='true'?'ok':''}">خطأ</span></div>`;
     else body=`<div class="opts">${q.correct?q.correct.split('|').map(a=>`<span class="opt ok">${esc(a.trim())}</span>`).join(''):'<span class="opt">تصحيح يدوي</span>'}</div>`;
     const kind={mcq:'اختيار من متعدد',tf:'صح/خطأ',text:'إجابة قصيرة'}[q.qtype];
+    const img=q.image_url?`<div style="margin-top:9px"><img src="${esc(q.image_url)}" alt="" style="max-height:130px;max-width:100%;border-radius:9px;border:1px solid #E6E8EE"></div>`:'';
     return `<div class="qrow">
-      <div class="qt">${i+1}. ${esc(q.text)}</div>${body}
+      <div class="qt">${i+1}. ${esc(q.text)}</div>${img}${body}
       <div class="meta"><span class="pill">${kind}</span><span class="pill warn">${q.points} نقطة</span>
         <div class="spacer"></div>
+        <button class="link" onclick="move(${q.id},-1)" ${i===0?'disabled style="opacity:.3"':''}>▲</button>
+        <button class="link" onclick="move(${q.id},1)" ${i===qs.length-1?'disabled style="opacity:.3"':''}>▼</button>
         <button class="link" onclick="editQ(${q.id})">تعديل</button>
         <button class="link del" onclick="delQ(${q.id})">حذف</button></div>
     </div>`;
@@ -259,7 +265,7 @@ async function addQ(){
   const tid=curTid(); if(!tid){toast('اختر أداة قياس',false);return;}
   const type=el('n-type').value, text=el('n-text').value.trim();
   if(!text){toast('اكتب نص السؤال',false);return;}
-  const body={text,qtype:type,points:el('n-points').value||1};
+  const body={text,qtype:type,points:el('n-points').value||1,image_url:el('n-img').value.trim()};
   if(type==='mcq'){
     body.options=OPTS.map(o=>o.trim()).filter(Boolean);
     const picked=document.querySelector('input[name=ok]:checked');
@@ -269,10 +275,18 @@ async function addQ(){
   else{body.correct=el('n-acc').value.trim();}
   const r=await jreq(`/api/tools/${tid}/questions`,body);
   const d=await r.json().catch(()=>({}));
-  if(r.ok){el('n-text').value='';el('n-acc').value='';OPTS=['',''];drawOpts();await loadTool();toast('أُضيف السؤال');}
+  if(r.ok){el('n-text').value='';el('n-acc').value='';el('n-img').value='';OPTS=['',''];drawOpts();await loadTool();toast('أُضيف السؤال');}
   else toast(d.error||'تعذّرت الإضافة',false);
 }
 let QCACHE=[];
+async function move(id,delta){
+  const ids=QCACHE.map(q=>q.id);
+  const i=ids.indexOf(id), j=i+delta;
+  if(i<0||j<0||j>=ids.length)return;
+  [ids[i],ids[j]]=[ids[j],ids[i]];
+  const r=await jreq(`/api/tools/${curTid()}/questions/reorder`,{order:ids});
+  if(r.ok)await loadTool();else toast('تعذّر الترتيب',false);
+}
 async function editQ(id){
   const q=QCACHE.find(x=>x.id===id); if(!q)return;
   const text=prompt('نص السؤال',q.text); if(text==null)return;
@@ -488,7 +502,7 @@ async function loadRun(rid){
     [d.submitted,'سلّم'],[d.in_progress,'يُجيب الآن'],[(d.absent||[]).length,'غائب'],
     [d.avg_percent!=null?d.avg_percent+'%':'—','المتوسط'],[review,'بانتظار تصحيح'],
   ].map(([v,k])=>`<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
-  el('monTable').innerHTML=`<thead><tr><th>#</th><th>الطالب</th><th>الرمز</th><th>الحالة</th><th>الدرجة</th><th>النسبة</th><th>سلّم في</th><th></th></tr></thead><tbody>`
+  el('monTable').innerHTML=`<thead><tr><th>#</th><th>الطالب</th><th>الرمز</th><th>الحالة</th><th>الدرجة</th><th>النسبة</th><th>سلّم في</th><th>خروج من الصفحة</th><th></th></tr></thead><tbody>`
     +(d.roster||[]).map(s=>{
       const [cls,lbl]=ST[s.status]||['','—'];
       return `<tr><td>${s.seat_no??''}</td><td>${esc(s.name)}</td><td><span class="code">${esc(s.code)}</span></td>
@@ -496,6 +510,7 @@ async function loadRun(rid){
         <td>${s.score!=null?`${s.score} / ${d.max_score}`:'—'}</td>
         <td>${s.percentage!=null?s.percentage+'%':'—'}</td>
         <td class="muted">${s.submitted_at?fmt(s.submitted_at):'—'}</td>
+        <td>${s.focus_losses?`<span class="pill ${s.focus_losses>=3?'err':'warn'}" title="عدد مرات مغادرة صفحة الاختبار — مؤشّر للمراجعة لا دليل">${s.focus_losses}×</span>`:'<span class="muted">—</span>'}</td>
         <td>${s.status==='submitted'?`<button class="link" onclick="openRev(${rid},${s.attempt_id||0},'${esc(s.name).replace(/'/g,"\\'")}')">الورقة</button>`:''}</td></tr>`;
     }).join('')+`</tbody>`;
 }

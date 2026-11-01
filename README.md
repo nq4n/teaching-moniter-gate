@@ -136,6 +136,19 @@ select the whole class and apply one mark in a click — each score still belong
 student. Exam tools fill themselves in from the students' own submissions, labelled by
 source, and a teacher edit overrides the automatic mark.
 
+### 🔑 Accounts, terms and records
+- **Account recovery** without a mail server: a one-time recovery code issued at
+  registration, stored only as a hash, rotated on every use
+- **Terms** — grades belong to a term and everything is scoped to the active one,
+  so starting term two keeps term one's marks instead of deleting them. The roster
+  carries over and students keep the login numbers already handed out
+- **استمارة تقييم الطالب** — the full record as Excel: every student against every
+  tool with totals, class averages, and a second sheet naming who is still unmarked
+- **School admin** — an aggregate-only view across the school's teachers, with no
+  student names, plus a last-resort password reset
+- Deletes state exactly what they would destroy; a grade holding marks needs its
+  name typed to confirm
+
 **👉 Full guide (Arabic): [EXAMS.md](EXAMS.md)**
 
 

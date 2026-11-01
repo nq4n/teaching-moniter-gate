@@ -136,3 +136,33 @@ assert upload(t, f"/api/sections/{sec['id']}/students/import",
 print(" 403 for another teacher · 400 for no file and for a corrupt one ✓")
 
 print("\n✅ test_upload passed")
+
+section("question images accept only http(s) links")
+ok(t.post(f"/api/tools/{tool['id']}/questions",
+          json={"text": "انظر الصورة", "qtype": "tf", "correct": "true", "points": 1,
+                "image_url": "https://example.om/diagram.png"}), "img")
+qs = ok(t.get(f"/api/tools/{tool['id']}/questions"), "ql")["questions"]
+withimg = [q for q in qs if q["image_url"]]
+assert len(withimg) == 1 and withimg[0]["image_url"].startswith("https://")
+for bad in ("javascript:alert(1)", "data:text/html,<script>", "ftp://x/y", "/etc/passwd"):
+    d = ok(t.post(f"/api/tools/{tool['id']}/questions",
+                  json={"text": f"خبيث {bad}", "qtype": "tf", "correct": "true",
+                        "points": 1, "image_url": bad}), "bad img")
+    assert d["question"]["image_url"] is None, bad
+print(" https accepted · javascript:/data:/ftp:/path all dropped ✓")
+
+section("reordering the paper")
+qs = ok(t.get(f"/api/tools/{tool['id']}/questions"), "before")["questions"]
+ids = [q["id"] for q in qs]
+flipped = list(reversed(ids))
+d = ok(t.post(f"/api/tools/{tool['id']}/questions/reorder", json={"order": flipped}), "reorder")
+assert [q["id"] for q in d["questions"]] == flipped
+# a partial list keeps the rest at the end rather than losing them
+d = ok(t.post(f"/api/tools/{tool['id']}/questions/reorder",
+              json={"order": [ids[0], ids[1]]}), "partial")
+got = [q["id"] for q in d["questions"]]
+assert got[:2] == [ids[0], ids[1]] and sorted(got) == sorted(ids), got
+# ids from another teacher's tool are ignored, not applied
+assert t2.post(f"/api/tools/{tool['id']}/questions/reorder",
+               json={"order": ids}).status_code == 403
+print(f" {len(ids)} questions reordered · partial list keeps the rest · 403 for others ✓")

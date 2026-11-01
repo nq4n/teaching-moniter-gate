@@ -172,7 +172,12 @@ input:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3p
 const el=id=>document.getElementById(id);
 const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let PAPER=null,ANSWERS={},DEADLINE=null,TICK=null,SAVER=null,SUBMITTING=false;
+let PAPER=null,ANSWERS={},DEADLINE=null,TICK=null,SAVER=null,SUBMITTING=false,FOCUS_LOST=0;
+// Counted for the teacher's information only — a notification or a locked
+// screen trips this honestly, so it is never treated as proof of anything.
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden&&PAPER&&!SUBMITTING)FOCUS_LOST++;
+});
 
 function show(v){['vLogin','vList','vExam','vReview','vDone'].forEach(x=>el(x).style.display=x===v?(x==='vLogin'?'block':'block'):'none');}
 function err(id,m){const e=el(id);if(!m){e.className='err';e.textContent='';return;}e.className='err on';e.textContent=m;}
@@ -256,7 +261,7 @@ async function start(rid){
   const r=await jreq(`/api/student/runs/${rid}`,{});
   const d=await r.json().catch(()=>({}));
   if(!r.ok){err('listErr',d.error||'تعذّر فتح الاختبار');setTimeout(()=>err('listErr',''),5000);return;}
-  PAPER=d;ANSWERS={};
+  PAPER=d;ANSWERS={};FOCUS_LOST=0;
   (d.questions||[]).forEach(q=>{if(q.saved!=null)ANSWERS[q.id]=q.saved;});
   el('examName').textContent=`${d.tool} — ${d.total_points} نقطة`;
   el('questions').innerHTML=(d.questions||[]).map((q,i)=>render(q,i)).join('');
@@ -268,7 +273,8 @@ async function start(rid){
 
 function render(q,i){
   const n=`<span class="n">${i+1}.</span> `;
-  const head=`<div class="qt">${n}${esc(q.text)} <span class="pill warn">${q.points}</span></div>`;
+  const img=q.image_url?`<div style="margin:-4px 0 12px"><img src="${esc(q.image_url)}" alt="" style="max-width:100%;border-radius:11px;border:1px solid #E6E8EE"></div>`:'';
+  const head=`<div class="qt">${n}${esc(q.text)} <span class="pill warn">${q.points}</span></div>${img}`;
   if(q.qtype==='mcq'){
     return `<div class="q">${head}${q.options.map((o,j)=>`
       <label class="opt ${String(ANSWERS[q.id])===String(j)?'sel':''}" onclick="pick(${q.id},${j},this)">
@@ -340,7 +346,7 @@ async function submitExam(auto){
   const done=(PAPER.questions||[]).filter(q=>ANSWERS[q.id]!=null&&ANSWERS[q.id]!=='').length;
   if(!auto&&done<total&&!confirm(`أجبت عن ${done} من ${total} سؤالًا. هل تريد التسليم الآن؟`))return;
   SUBMITTING=true;el('submitBtn').disabled=true;stopClock();
-  const r=await jreq(`/api/student/runs/${PAPER.run_id}/submit`,{answers:ANSWERS});
+  const r=await jreq(`/api/student/runs/${PAPER.run_id}/submit`,{answers:ANSWERS,focus_losses:FOCUS_LOST});
   const d=await r.json().catch(()=>({}));
   SUBMITTING=false;el('submitBtn').disabled=false;
   if(!r.ok){err('examErr',d.error||'تعذّر التسليم — حاول مرة أخرى');return;}

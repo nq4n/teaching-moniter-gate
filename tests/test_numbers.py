@@ -212,3 +212,19 @@ other.post("/api/student/login", json={"code": "20231045"})
 assert other.get(f"/api/student/runs/{run2['id']}/answers").status_code == 409
 assert A.app.test_client().get(f"/api/student/runs/{run2['id']}/answers").status_code == 401
 print(" 409 for a student who did not sit it · 401 for no session ✓")
+
+section("the focus-loss signal reaches the teacher's monitor")
+run3 = ok(t.post(f"/api/tools/{exam['id']}/runs",
+                 json={"section_id": sec["id"], "duration_min": 30}), "run3")
+sf = A.app.test_client()
+sf.post("/api/student/login", json={"code": "20231046"})
+paper = ok(sf.post(f"/api/student/runs/{run3['id']}", json={}), "paper")
+ok(sf.post(f"/api/student/runs/{run3['id']}/submit",
+           json={"answers": {str(paper["questions"][0]["id"]): "true"},
+                 "focus_losses": 4}), "submit")
+mon = ok(t.get(f"/api/runs/{run3['id']}"), "monitor")
+row = [r for r in mon["roster"] if r["code"] == "20231046"][0]
+assert row["focus_losses"] == 4
+others = [r for r in mon["roster"] if r["code"] != "20231046"]
+assert all(r["focus_losses"] == 0 for r in others)
+print(f" recorded {row['focus_losses']}× for the student who left the page ✓")

@@ -205,3 +205,41 @@ for page in ("/account", "/admin", "/recover", "/setup", "/grading", "/exams"):
 print(" ✓")
 
 print("\n✅ test_account_terms passed")
+
+section("concurrent first requests create exactly one term, not several")
+import threading
+t3 = A.app.test_client()
+teacher(t3, "racer")
+errors = []
+
+
+ENDPOINTS = ["/api/structure", "/api/grades-progress", "/api/overview",
+             "/api/tools", "/api/analytics", "/api/terms"]
+
+
+def hit(path):
+    try:
+        c = A.app.test_client()
+        c.post("/login", data={"username": "racer", "password": "pw"})
+        r = c.get(path)
+        if r.status_code != 200:
+            errors.append(f"{path} -> {r.status_code}")
+    except Exception as exc:            # noqa: BLE001
+        errors.append(repr(exc)[:160])
+
+
+threads = [threading.Thread(target=hit, args=(ENDPOINTS[i % len(ENDPOINTS)],))
+           for i in range(18)]
+for x in threads:
+    x.start()
+for x in threads:
+    x.join()
+assert not errors, errors
+with A.app.app_context():
+    uid = A.User.query.filter_by(username="racer").first().id
+    terms = A.Term.query.filter_by(user_id=uid).all()
+    actives = [x for x in terms if x.is_active]
+assert len(terms) == 1, [x.name for x in terms]
+assert len(actives) == 1
+print(f" 18 concurrent first requests → {len(terms)} term, {len(actives)} active,"
+      f" no 500s ✓")

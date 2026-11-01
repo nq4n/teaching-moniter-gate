@@ -129,6 +129,8 @@ class Term(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    __table_args__ = (db.UniqueConstraint("user_id", "name", name="uq_term_user_name"),)
+
     user = db.relationship("User", backref=db.backref("terms", cascade="all, delete-orphan"))
     grades = db.relationship("Grade", cascade="all, delete-orphan", backref="term")
 
@@ -240,6 +242,10 @@ class Question(db.Model):
     correct = db.Column(db.String(500))               # mcq: index; tf: "true"/"false"; text: accepted answers separated by |
     points = db.Column(db.Float, default=1.0)
     order = db.Column(db.Integer, default=0)
+    # A link to an image, not an upload: the container's disk is ephemeral, so
+    # an uploaded file would vanish on the next deploy. Paste a URL from Drive,
+    # the school site, or any host instead.
+    image_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
@@ -305,6 +311,10 @@ class ExamAttempt(db.Model):
     percentage = db.Column(db.Float, default=0.0)
     needs_review = db.Column(db.Boolean, default=False)  # has open-text answers
     status = db.Column(db.String(12), default="in_progress")  # in_progress / submitted
+    # How often the exam tab lost focus. A signal for the teacher to look into,
+    # NOT proof of anything: any student can defeat it, and a notification or a
+    # dying battery trips it honestly. Never acted on automatically.
+    focus_losses = db.Column(db.Integer, default=0)
 
     __table_args__ = (db.UniqueConstraint("run_id", "student_id", name="uq_attempt_run_student"),)
 
@@ -400,23 +410,75 @@ def parse_date(v):
 
 
 def active_term(user=None):
-    """The term the teacher is working in; created on first need."""
+    """The term the teacher is working in; created on first need.
+
+    A browser opening a page fires several requests at once, and each one needs
+    a term. Creating it has to be safe to race: the unique (user, name) index
+    makes the loser fail, and it then picks up the winner's row instead. Any
+    empty same-named duplicate left by an older build is cleaned up here too.
+    """
+    from sqlalchemy.exc import IntegrityError
     user = user or current_user
-    t = Term.query.filter_by(user_id=user.id, is_active=True).first()
+
+    t = Term.query.filter_by(user_id=user.id, is_active=True).order_by(Term.id).first()
     if t is None:
         t = Term.query.filter_by(user_id=user.id).order_by(Term.id.desc()).first()
         if t is not None:
             t.is_active = True
             db.session.commit()
     if t is None:
-        t = Term(user_id=user.id, name=user.term_name or "الفصل الدراسي الأول",
+        name = user.term_name or "الفصل الدراسي الأول"
+        t = Term(user_id=user.id, name=name,
                  start_date=user.term_start or DEFAULT_TERM_START, is_active=True)
         db.session.add(t)
-        db.session.flush()
-        # Adopt any grades that pre-date terms.
-        Grade.query.filter_by(user_id=user.id, term_id=None).update({"term_id": t.id})
-        db.session.commit()
-    return t
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            t = Term.query.filter_by(user_id=user.id, name=name).order_by(Term.id).first()
+            if t is None:
+                raise
+
+    keep = t.id
+    changed = False
+
+    # Clean up empty same-named twins left by a build without the unique index.
+    # Lowest id wins, so every racing request converges on the same row instead
+    # of each deleting the other's.
+    twins = (Term.query.filter_by(user_id=user.id, name=t.name)
+             .order_by(Term.id).all())
+    if len(twins) > 1:
+        keep = twins[0].id
+        for d in twins[1:]:
+            if not Grade.query.filter_by(term_id=d.id).count():
+                db.session.delete(d)
+                changed = True
+
+    if Term.query.filter_by(user_id=user.id, is_active=True).filter(
+            Term.id != keep).count():
+        Term.query.filter_by(user_id=user.id).filter(Term.id != keep).update(
+            {"is_active": False})
+        Term.query.filter_by(id=keep).update({"is_active": True})
+        changed = True
+
+    if Grade.query.filter_by(user_id=user.id, term_id=None).count():
+        # Grades that pre-date terms join the one the teacher is in.
+        Grade.query.filter_by(user_id=user.id, term_id=None).update({"term_id": keep})
+        changed = True
+
+    if changed:
+        try:
+            db.session.commit()
+        except Exception:                       # noqa: BLE001 - another request won
+            db.session.rollback()
+
+    # Never hand back an instance a racing request may have just removed.
+    fresh = db.session.get(Term, keep)
+    if fresh is None:
+        fresh = (Term.query.filter_by(user_id=user.id, is_active=True)
+                 .order_by(Term.id).first()
+                 or Term.query.filter_by(user_id=user.id).order_by(Term.id).first())
+    return fresh
 
 
 def _grades_for_user():
@@ -2203,9 +2265,19 @@ def _student_json(s, with_code=True):
     return d
 
 
+def _safe_image_url(v):
+    """Only an http(s) link. Anything else (javascript:, data:) is dropped."""
+    u = str(v or "").strip()
+    if not u:
+        return None
+    if not re.match(r"^https?://", u, re.I):
+        return None
+    return u[:500]
+
+
 def _question_json(q, reveal=False):
     d = {"id": q.id, "text": q.text, "qtype": q.qtype, "options": q.options,
-         "points": q.points, "order": q.order}
+         "points": q.points, "order": q.order, "image_url": q.image_url}
     if reveal:
         d["correct"] = q.correct
     return d
@@ -2377,11 +2449,38 @@ def tool_questions(tid):
         correct=correct,
         points=float(data.get("points") or 1),
         order=int(data.get("order") or (len(t.questions) + 1)),
+        image_url=_safe_image_url(data.get("image_url")),
     )
     db.session.add(q)
     db.session.commit()
     return jsonify({"question": _question_json(q, reveal=True),
                     "total_points": tool_total_points(t)}), 201
+
+
+@app.route("/api/tools/<int:tid>/questions/reorder", methods=["POST"])
+@login_required
+def reorder_questions(tid):
+    """Set the paper's order from a list of question ids."""
+    t = Tool.query.get_or_404(tid)
+    if not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+    data = request.get_json(force=True) or {}
+    order = data.get("order") or []
+    mine = {q.id: q for q in t.questions}
+    seen = []
+    for i, qid in enumerate(order, start=1):
+        q = mine.get(int(qid))
+        if q is not None and q.id not in seen:
+            q.order = i
+            seen.append(q.id)
+    # Anything the client did not mention keeps its place at the end.
+    tail = len(seen)
+    for q in t.questions:
+        if q.id not in seen:
+            tail += 1
+            q.order = tail
+    db.session.commit()
+    return jsonify({"questions": [_question_json(q, reveal=True) for q in t.questions]})
 
 
 @app.route("/api/questions/<int:qid>", methods=["PUT", "DELETE"])
@@ -2409,6 +2508,8 @@ def question_detail(qid):
         q.options_json = json.dumps(opts, ensure_ascii=False) if opts else None
     if "correct" in data:
         q.correct = str(data["correct"]).strip()
+    if "image_url" in data:
+        q.image_url = _safe_image_url(data["image_url"])
     db.session.commit()
     return jsonify({"question": _question_json(q, reveal=True),
                     "total_points": tool_total_points(t)})
@@ -2578,6 +2679,7 @@ def run_detail(rid):
             "score": (round(a.score, 2) if a and a.status == "submitted" else None),
             "percentage": (round(a.percentage, 1) if a and a.status == "submitted" else None),
             "needs_review": bool(a.needs_review) if a else False,
+            "focus_losses": (a.focus_losses or 0) if a else 0,
             "started_at": iso_dt(a.started_at) if a else None,
             "submitted_at": iso_dt(a.submitted_at) if a else None,
         })
@@ -4042,6 +4144,10 @@ def student_submit(rid):
     incoming = data.get("answers") or {}
     answers = {k: v.get("value") for k, v in a.answers.items()}
     answers.update({str(k): v for k, v in incoming.items()})
+    try:
+        a.focus_losses = max(a.focus_losses or 0, int(data.get("focus_losses") or 0))
+    except (TypeError, ValueError):
+        pass
 
     earned, total, detail, needs_review = grade_answers(run.tool, answers)
     a.answers_json = json.dumps(detail, ensure_ascii=False)
@@ -4092,6 +4198,8 @@ def ensure_columns():
         "user": [("term_name", "VARCHAR(120)"), ("term_start", "DATE"),
                  ("recovery_hash", "VARCHAR(255)")],
         "grade": [("term_id", "INTEGER")],
+        "question": [("image_url", "VARCHAR(500)")],
+        "exam_attempt": [("focus_losses", "INTEGER")],
         "tool": [("applied_date", "DATE")],
         "score_entry": [("student_id", "INTEGER"), ("source", "VARCHAR(12)")],
         "student": [("seat_no", "INTEGER")],

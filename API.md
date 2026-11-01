@@ -50,7 +50,22 @@
 | `PUT` `DELETE` | `/api/sections/<sid>` | تعديل / حذف شعبة |
 | `POST` | `/api/grades/<gid>/tools` | إضافة أداة قياس |
 | `PUT` `DELETE` | `/api/tools/<tid>` | تعديل / حذف أداة |
-| `GET` `PUT` | `/api/term` | اسم الفصل الدراسي وتاريخ بدايته |
+| `GET` `PUT` | `/api/term` | اسم الفصل الدراسي وتاريخ بدايته (توافق قديم) |
+| `GET` `POST` | `/api/terms` | الفصول الدراسية / بدء فصل جديد |
+| `PUT` `DELETE` | `/api/terms/<tid>` | تعديل أو تفعيل / حذف فصل |
+| `GET` | `/api/terms/<tid>/impact` | ما يحويه فصل قبل حذفه |
+| `GET` | `/api/grades/<gid>/impact` | ما سيُفقد بحذف صف |
+| `GET` | `/api/sections/<sid>/impact` | ما سيُفقد بحذف شعبة |
+
+```jsonc
+// POST /api/terms
+{"name": "الفصل الدراسي الثاني 2026/2027", "start_date": "2027-01-25",
+ "copy_from": 3,      // انسخ الصفوف والشُعب والطلبة من هذا الفصل، بلا درجات
+ "activate": true}
+```
+
+كل ما يراه المعلّم يخصّ الفصل النشط. الطلبة المنسوخون يحتفظون بأرقامهم، وصفوف
+الفصل السابق تُحفظ برقم مركون لا يصلح للدخول.
 
 ```jsonc
 // POST /api/setup
@@ -96,16 +111,37 @@
 
 ---
 
+## الحساب والإدارة
+
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` `POST` | `/recover` | استرجاع الحساب برمز الاسترجاع (صفحة) |
+| `GET` `PUT` | `/api/account` | بيانات الحساب / تعديل البريد والمدرسة |
+| `POST` | `/api/account/password` | `{"current": "…", "new": "…"}` |
+| `POST` | `/api/account/recovery-code` | توليد رمز استرجاع جديد (يُبطل القديم) |
+| `GET` | `/api/admin/teachers` | نظرة مدير المدرسة — تجميعية بلا أسماء طلبة |
+| `POST` | `/api/admin/teachers/<uid>/reset-password` | كلمة مرور مؤقتة لمعلّم |
+
+نقاط `/api/admin/*` ترد `403` لغير المدير. ورمز الاسترجاع يُحفظ مشفّرًا، ويُقارن
+بعد تطبيعه (تُهمَل الشرطات والمسافات وحالة الأحرف).
+
+---
+
 ## الدرجات
 
 | الطريقة | المسار | الوظيفة |
 |---|---|---|
+| `GET` | `/api/sections/<sid>/report` | استمارة تقييم الطالب — كل الطلبة × كل الأدوات |
+| `GET` | `/api/sections/<sid>/report.xlsx` | نفسها كملف Excel + ورقة «النواقص» |
 | `GET` `POST` | `/api/sections/<sid>/tools/<tid>/roster-scores` | **تقييم الطلبة بأسمائهم** |
 | `POST` | `/api/sections/<sid>/tools/<tid>/scores/import` | رفع درجات مطابَقة بالطلبة |
 | `GET` | `/api/sections/<sid>/tools/<tid>/scores-template.xlsx` | كشف درجات مُعبّأ بالأسماء والأرقام |
 | `GET` | `/api/sections/<sid>/tools/<tid>/scores` | قراءة درجات أداة في شعبة |
 | `POST` | `/api/sections/<sid>/tools/<tid>/scores` | لصق عمود درجات **مجهول** (الطريقة القديمة) |
 | `POST` | `/api/sections/<sid>/import` | استيراد جدول درجات كامل للشعبة (مجهول) |
+
+> المساران المجهولان يردّان **`409`** للشعبة التي فيها طلبة مسجّلون، مع
+> `{"redirect": "/grading"}` — فلو عملا معًا على نفس الأداة لحُسبت الدرجات مرتين.
 | `GET` | `/api/sections/<sid>/template.xlsx` | قالب جدول الدرجات المجهول |
 
 ```jsonc
@@ -137,12 +173,14 @@
 | `GET` `POST` | `/api/tools/<tid>/questions` | أسئلة الأداة / إضافة سؤال |
 | `PUT` `DELETE` | `/api/questions/<qid>` | تعديل / حذف سؤال |
 | `POST` | `/api/tools/<tid>/questions/import` | رفع ورقة أسئلة (`commit`, `replace`) |
+| `POST` | `/api/tools/<tid>/questions/reorder` | `{"order": [qid, …]}` — ترتيب الورقة |
 | `GET` | `/api/tools/<tid>/questions-template.xlsx` | قالب الأسئلة |
 
 ```jsonc
 // POST /api/tools/<tid>/questions
 {"text": "ما هي وحدة قياس سرعة المعالج؟", "qtype": "mcq",
- "options": ["بايت", "هرتز", "بكسل"], "correct": "1", "points": 4}
+ "options": ["بايت", "هرتز", "بكسل"], "correct": "1", "points": 4,
+ "image_url": "https://…"}   // رابط http(s) فقط — المنصة لا تستضيف الملفات
 
 // qtype: "mcq"  → correct = فهرس الخيار الصحيح (نصًّا)
 //        "tf"   → correct = "true" | "false"
@@ -167,12 +205,13 @@
  "duration_min": 30,            // مهلة شخصية لكل طالب، تبدأ من دخوله
  "absentees_only": false,       // تشغيل لاحق لمن لم يسلّم
  "allowed_students": [12, 13],  // أو افتحه لطلبة محدّدين فقط
- "shuffle": true, "show_score": true}
+ "shuffle": true, "show_score": true,
+ "show_answers": false}         // السماح للطالب بمراجعة إجاباته بعد التسليم
 
 // PUT /api/runs/<rid>
 {"action": "start_now" | "close" | "reopen" | "extend", "minutes": 10}
 // أو بلا action: تعديل start_at / end_at / duration_min / shuffle /
-//                show_score / allowed_students (قائمة فارغة = الشعبة كاملة)
+//                show_score / show_answers / allowed_students (فارغة = الشعبة كاملة)
 ```
 
 `phase` في الرد محسوبة من الساعة لا مخزّنة:
@@ -185,6 +224,7 @@
  "roster": [{"student_id": 12, "name": "محمد علي", "code": "20231045",
              "status": "submitted" | "in_progress" | "absent",
              "score": 8.5, "percentage": 85, "needs_review": false,
+             "focus_losses": 2,   // مرات مغادرة الصفحة — مؤشّر لا دليل
              "attempt_id": 41, "submitted_at": "2026-11-05T08:31:00Z"}],
  "absent": [/* صفوف الغائبين من نفس القائمة */]}
 ```
@@ -205,6 +245,7 @@
 | `GET` `POST` | `/api/student/runs/<rid>` | ورقة الأسئلة / بدء المحاولة |
 | `POST` | `/api/student/runs/<rid>/save` | حفظ تلقائي أثناء الحل |
 | `POST` | `/api/student/runs/<rid>/submit` | التسليم والتصحيح |
+| `GET` | `/api/student/runs/<rid>/answers` | مراجعة إجاباته — إن أتاحها المعلّم |
 
 `GET /api/student/runs/<rid>` لا يُرجع الإجابات الصحيحة إطلاقًا.
 والطالب يرى درجاته هو فقط — لا درجات زملائه ولا أي متوسطات.
