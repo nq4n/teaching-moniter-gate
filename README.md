@@ -145,7 +145,9 @@ source, and a teacher edit overrides the automatic mark.
 - **استمارة تقييم الطالب** — the full record as Excel: every student against every
   tool with totals, class averages, and a second sheet naming who is still unmarked
 - **School admin** — an aggregate-only view across the school's teachers, with no
-  student names, plus a last-resort password reset
+  student names, and the ability to issue a teacher a fresh recovery code.
+  Deliberately not a password reset: the teacher sets their own password, so an
+  admin can restore access without ever being able to sign in as them
 - Deletes state exactly what they would destroy; a grade holding marks needs its
   name typed to confirm
 

@@ -25,14 +25,17 @@
         <div style="overflow:auto"><table id="tbl"></table></div>
       </div>
       <div class="card">
-        <div class="hd"><h3>إعادة تعيين كلمة مرور معلّم</h3></div>
-        <p class="lead">آخر حلّ لمعلّم فقد كلمة مروره <b>ورمز الاسترجاع</b> معًا. تُولَّد كلمة
-          مرور مؤقتة تُعطيها له ليغيّرها من صفحة حسابه.</p>
+        <div class="hd"><h3>إصدار رمز استرجاع لمعلّم</h3></div>
+        <p class="lead">لمعلّم فقد كلمة مروره <b>ورمز الاسترجاع</b> معًا. يُولَّد رمز جديد
+          تسلّمه له، فيضع هو كلمة المرور من صفحة <b>استرجاع الحساب</b>.
+          <br>عمدًا ليست «إعادة تعيين كلمة مرور»: بهذه الطريقة لا تعرف أنت كلمة مروره،
+          فلا تستطيع الدخول باسمه والاطّلاع على أسماء طلبته ودرجاتهم.
+          كلمة مروره الحالية تبقى صالحة حتى يستخدم الرمز، وإصدار رمز يُبطل رمزه السابق.</p>
         <div class="pickers" style="margin-top:14px;max-width:560px">
           <div><label>المعلّم</label><select id="who"></select></div>
           <div><label>كلمة مرورك أنت (للتأكيد)</label><input id="mypw" type="password"></div>
         </div>
-        <button class="btn danger" style="margin-top:16px" onclick="reset()">إعادة التعيين</button>
+        <button class="btn" style="margin-top:16px" onclick="issue()">إصدار رمز استرجاع</button>
         <div id="temp"></div>
       </div>
     </div>
@@ -60,18 +63,21 @@ async function load(){
     .map(x=>`<option value="${x.id}">${esc(x.username)}</option>`).join('')
     ||'<option value="">— لا معلّمين آخرين —</option>';
 }
-async function reset(){
+async function issue(){
   const uid=el('who').value; if(!uid){toast('اختر معلّمًا',false);return;}
   if(!el('mypw').value){toast('أدخل كلمة مرورك للتأكيد',false);return;}
-  if(!confirm('إعادة تعيين كلمة مرور هذا المعلّم؟'))return;
-  const r=await jreq(`/api/admin/teachers/${uid}/reset-password`,{current:el('mypw').value});
+  if(!confirm('إصدار رمز استرجاع جديد لهذا المعلّم؟ سيُبطل رمزه السابق.'))return;
+  const r=await jreq(`/api/admin/teachers/${uid}/recovery-code`,{current:el('mypw').value});
   const d=await r.json().catch(()=>({}));
   if(!r.ok){toast(d.error||'تعذّرت العملية',false);return;}
   el('mypw').value='';
-  el('temp').innerHTML=`<div class="hint" style="margin-top:16px">كلمة مرور مؤقتة لـ
-    <b>${esc(d.username)}</b>: <span class="code">${esc(d.temp_password)}</span><br>
-    أعطِها له ليدخل بها ثم يغيّرها فورًا من صفحة «حسابي».</div>`;
-  toast('أُعيد التعيين');
+  el('temp').innerHTML=`<div class="hint" style="margin-top:16px">
+    رمز استرجاع لـ <b>${esc(d.username)}</b>:
+    <span class="code" style="font-size:15px">${esc(d.code)}</span>
+    <button class="linkbtn" onclick="navigator.clipboard.writeText('${esc(d.code)}').then(()=>toast('نُسخ'))">نسخ</button><br>
+    سلّمه له ليفتح <b>استرجاع الحساب</b> ويضع كلمة مروره بنفسه.
+    <br><span class="muted">لن يُعرض مرة أخرى — المنصة تحفظ بصمته المشفّرة لا الرمز.</span></div>`;
+  toast('صدر الرمز — سلّمه للمعلّم');
 }
 window.__mnrManualLoader=true;
 load().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());

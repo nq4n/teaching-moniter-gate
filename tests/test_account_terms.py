@@ -178,26 +178,68 @@ blob = str(d)
 assert not any(n in blob for n in ("محمد علي", "سارة سالم", "يوسف خالد")), "names leaked"
 print(f" {len(d['teachers'])} teacher(s) · {row['students']} students · aggregate only ✓")
 
-section("admin can reset a teacher who lost everything")
+section("admin issues a recovery code — not a password it would then know")
 t2 = A.app.test_client()
 teacher(t2, "zed")
 with A.app.app_context():
     zid = A.User.query.filter_by(username="zed").first().id
-assert t.post(f"/api/admin/teachers/{zid}/reset-password",
+    before = A.User.query.filter_by(username="zed").first().password_hash
+
+assert t.post(f"/api/admin/teachers/{zid}/recovery-code",
               json={"current": "wrong"}).status_code == 403
-d = ok(t.post(f"/api/admin/teachers/{zid}/reset-password",
-              json={"current": "abc123"}), "reset")
-assert d["username"] == "zed" and len(d["temp_password"]) >= 8
-fresh2 = A.app.test_client()
-assert fresh2.post("/login", data={"username": "zed", "password": d["temp_password"]},
-                   follow_redirects=False).status_code == 302
-print(" temp password issued and works ✓")
+d = ok(t.post(f"/api/admin/teachers/{zid}/recovery-code",
+              json={"current": "abc123"}), "issue")
+assert d["username"] == "zed"
+assert re.fullmatch(r"[A-Z0-9]{4}(-[A-Z0-9]{4}){3}", d["code"]), d["code"]
+print(" issued:", d["code"])
+
+with A.app.app_context():
+    after = A.User.query.filter_by(username="zed").first()
+    assert after.password_hash == before, "the teacher's password must be untouched"
+    assert d["code"] not in (after.recovery_hash or ""), "stored as a hash only"
+assert A.app.test_client().post("/login", data={"username": "zed", "password": "pw"},
+                                follow_redirects=False).status_code == 302
+print(" their existing password still works ✓ · stored as a hash ✓")
+
+section("the teacher sets their own password with it; the admin never learns it")
+anon2 = A.app.test_client()
+r = anon2.post("/recover", data={"username": "zed", "code": d["code"],
+                                 "password": "zedpw1", "confirm_password": "zedpw1"})
+assert re.search(r'id="code">([A-Z0-9\-]+)<', r.get_data(as_text=True)), "a replacement code follows"
+assert A.app.test_client().post("/login", data={"username": "zed", "password": "zedpw1"},
+                                follow_redirects=False).status_code == 302
+assert A.app.test_client().post("/login", data={"username": "zed", "password": "pw"},
+                                follow_redirects=False).status_code == 200  # old one refused
+print(" new password works · old one refused ✓")
+
+section("a spent admin code cannot be reused, and issuing one voids the previous")
+assert "غير صحيح" in anon2.post("/recover", data={
+    "username": "zed", "code": d["code"],
+    "password": "again1", "confirm_password": "again1"}).get_data(as_text=True)
+first = ok(t.post(f"/api/admin/teachers/{zid}/recovery-code",
+                  json={"current": "abc123"}), "c1")["code"]
+second = ok(t.post(f"/api/admin/teachers/{zid}/recovery-code",
+                   json={"current": "abc123"}), "c2")["code"]
+assert first != second
+assert "غير صحيح" in A.app.test_client().post("/recover", data={
+    "username": "zed", "code": first,
+    "password": "nope12", "confirm_password": "nope12"}).get_data(as_text=True)
+ok2 = A.app.test_client().post("/recover", data={
+    "username": "zed", "code": second,
+    "password": "final1", "confirm_password": "final1"})
+assert re.search(r'id="code">', ok2.get_data(as_text=True))
+print(" spent code refused · a second issue voids the first ✓")
+
+section("only an admin can do it, and not to themselves")
 with A.app.app_context():
     aid = A.User.query.filter_by(username="mo").first().id
-assert t.post(f"/api/admin/teachers/{aid}/reset-password",
+assert t.post(f"/api/admin/teachers/{aid}/recovery-code",
               json={"current": "abc123"}).status_code == 400
-assert t2.get("/api/admin/teachers").status_code == 403
-print(" admin cannot reset themselves here · non-admin still 403 ✓")
+assert t2.post(f"/api/admin/teachers/{zid}/recovery-code",
+               json={"current": "pw"}).status_code == 403
+assert t.post("/api/admin/teachers/999999/recovery-code",
+              json={"current": "abc123"}).status_code == 404
+print(" 400 for self · 403 for non-admin · 404 for unknown ✓")
 
 section("pages render")
 for page in ("/account", "/admin", "/recover", "/setup", "/grading", "/exams"):

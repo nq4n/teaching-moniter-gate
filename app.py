@@ -881,24 +881,31 @@ def admin_teachers():
     return jsonify({"teachers": out, "school": current_user.school})
 
 
-@app.route("/api/admin/teachers/<int:uid>/reset-password", methods=["POST"])
+@app.route("/api/admin/teachers/<int:uid>/recovery-code", methods=["POST"])
 @login_required
-def admin_reset_password(uid):
-    """Last resort when a teacher has lost both password and recovery code."""
+def admin_issue_recovery_code(uid):
+    """Issue a fresh recovery code for a teacher who lost theirs.
+
+    Deliberately NOT a password reset. The admin hands over a code and the
+    teacher sets a password at /recover that nobody else ever sees — so an
+    admin can restore access without being able to sign in as that teacher and
+    read their students' names and marks. The teacher's existing password keeps
+    working until they use the code, and issuing one voids their previous code.
+    """
     if not current_user.is_admin:
         return jsonify({"error": "هذه الصفحة لمدير المدرسة"}), 403
     u = db.session.get(User, uid)
     if u is None:
         return jsonify({"error": "غير موجود"}), 404
     if u.id == current_user.id:
-        return jsonify({"error": "استخدم صفحة حسابك لتغيير كلمة مرورك"}), 400
+        return jsonify({"error": "استخدم صفحة حسابك لتوليد رمزك"}), 400
     data = request.get_json(force=True) or {}
     if not current_user.check_password(data.get("current") or ""):
         return jsonify({"error": "أدخل كلمة مرورك للتأكيد"}), 403
-    temp = gen_recovery_code()[:9]
-    u.set_password(temp)
+    code = gen_recovery_code()
+    u.recovery_hash = hash_recovery(code)
     db.session.commit()
-    return jsonify({"username": u.username, "temp_password": temp})
+    return jsonify({"username": u.username, "code": code})
 
 
 @app.route("/admin")
