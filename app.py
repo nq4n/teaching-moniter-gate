@@ -8,7 +8,10 @@ Grades (الصفوف) 5–12, each with its own sections (شُعب) and its own
 measurement tools (أدوات القياس).
 """
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file
+from flask import (
+    Flask, render_template, request, jsonify, redirect, url_for, send_file,
+    session,
+)
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_login import (
@@ -16,9 +19,12 @@ from flask_login import (
     login_required, current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+import hashlib
+import json
 import os
 import re
+import secrets
 import statistics
 from dotenv import load_dotenv
 
@@ -115,6 +121,10 @@ class Section(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     entries = db.relationship("ScoreEntry", cascade="all, delete-orphan", backref="section")
+    students = db.relationship(
+        "Student", cascade="all, delete-orphan", backref="section",
+        order_by="Student.seat_no.asc().nullslast(), Student.id.asc()",
+    )
 
 
 class Tool(db.Model):
@@ -131,6 +141,10 @@ class Tool(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     entries = db.relationship("ScoreEntry", cascade="all, delete-orphan", backref="tool")
+    questions = db.relationship(
+        "Question", cascade="all, delete-orphan", backref="tool_ref",
+        order_by="Question.order.asc(), Question.id.asc()",
+    )
 
 
 class ScoreEntry(db.Model):
@@ -141,6 +155,11 @@ class ScoreEntry(db.Model):
     score = db.Column(db.Float, nullable=False)
     max_score = db.Column(db.Float, default=100.0)
     percentage = db.Column(db.Float, nullable=False, default=0.0)
+    # Set only for scores produced by an online exam, so a re-run of the exam
+    # updates that student's row instead of adding a duplicate. Manual/pasted
+    # scores keep it NULL and stay fully anonymous.
+    student_id = db.Column(db.Integer, db.ForeignKey("student.id"), index=True)
+    source = db.Column(db.String(12), default="manual")   # manual / exam
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -155,6 +174,101 @@ class Lesson(db.Model):
     taught_date = db.Column(db.Date)                     # when it was actually taught
     order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Student(db.Model):
+    """طالب — short registration: a name + an auto-generated login code.
+
+    This is the ONLY place a student name is stored, and it exists purely so a
+    teacher can hand out exam codes. All analytics stay aggregate: the name is
+    never exposed by the aggregate endpoints or the dashboard.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    section_id = db.Column(db.Integer, db.ForeignKey("section.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    code = db.Column(db.String(12), unique=True, nullable=False, index=True)
+    seat_no = db.Column(db.Integer)           # رقم الطالب في الكشف
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    attempts = db.relationship("ExamAttempt", cascade="all, delete-orphan", backref="student")
+
+
+class Question(db.Model):
+    """سؤال داخل أداة قياس (اختبار) — belongs to an existing Tool."""
+    id = db.Column(db.Integer, primary_key=True)
+    tool_id = db.Column(db.Integer, db.ForeignKey("tool.id"), nullable=False, index=True)
+    text = db.Column(db.Text, nullable=False)
+    qtype = db.Column(db.String(12), default="mcq")   # mcq / tf / text
+    options_json = db.Column(db.Text)                 # JSON list[str] for mcq
+    correct = db.Column(db.String(500))               # mcq: index; tf: "true"/"false"; text: accepted answers separated by |
+    points = db.Column(db.Float, default=1.0)
+    order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def options(self):
+        if not self.options_json:
+            return []
+        try:
+            v = json.loads(self.options_json)
+            return v if isinstance(v, list) else []
+        except (ValueError, TypeError):
+            return []
+
+
+class ExamRun(db.Model):
+    """تشغيل اختبار — one scheduled window of a Tool for one Section.
+
+    The teacher runs an exam once (round 1); a second run (round 2, 3 …) can be
+    opened later for the students who were absent, without touching the first
+    round's results.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    tool_id = db.Column(db.Integer, db.ForeignKey("tool.id"), nullable=False, index=True)
+    section_id = db.Column(db.Integer, db.ForeignKey("section.id"), nullable=False, index=True)
+    round_no = db.Column(db.Integer, default=1)
+    label = db.Column(db.String(120))
+    start_at = db.Column(db.DateTime)        # UTC — exam opens itself at this moment
+    end_at = db.Column(db.DateTime)          # UTC — exam closes itself at this moment
+    duration_min = db.Column(db.Integer)     # per-student time limit (minutes), optional
+    absentees_only = db.Column(db.Boolean, default=False)
+    shuffle = db.Column(db.Boolean, default=True)
+    show_score = db.Column(db.Boolean, default=True)
+    state = db.Column(db.String(12), default="scheduled")  # scheduled / closed  (open is derived from the clock)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    tool = db.relationship("Tool", backref=db.backref("runs", cascade="all, delete-orphan"))
+    section = db.relationship("Section", backref=db.backref("runs", cascade="all, delete-orphan"))
+    attempts = db.relationship("ExamAttempt", cascade="all, delete-orphan", backref="run")
+
+
+class ExamAttempt(db.Model):
+    """محاولة طالب في تشغيل اختبار."""
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("exam_run.id"), nullable=False, index=True)
+    student_id = db.Column(db.Integer, db.ForeignKey("student.id"), nullable=False, index=True)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime)
+    answers_json = db.Column(db.Text)
+    raw_points = db.Column(db.Float, default=0.0)    # points earned out of the paper total
+    total_points = db.Column(db.Float, default=0.0)  # paper total
+    score = db.Column(db.Float, default=0.0)         # scaled onto tool.max_score
+    percentage = db.Column(db.Float, default=0.0)
+    needs_review = db.Column(db.Boolean, default=False)  # has open-text answers
+    status = db.Column(db.String(12), default="in_progress")  # in_progress / submitted
+
+    __table_args__ = (db.UniqueConstraint("run_id", "student_id", name="uq_attempt_run_student"),)
+
+    @property
+    def answers(self):
+        if not self.answers_json:
+            return {}
+        try:
+            v = json.loads(self.answers_json)
+            return v if isinstance(v, dict) else {}
+        except (ValueError, TypeError):
+            return {}
 
 
 @login_manager.user_loader
@@ -350,6 +464,20 @@ def entry():
 @login_required
 def lessons_page():
     return render_template("lessons.html", username=current_user.username,
+                           school=current_user.school)
+
+
+@app.route("/exams")
+@login_required
+def exams_page():
+    return render_template("exams.html", username=current_user.username,
+                           school=current_user.school)
+
+
+@app.route("/students")
+@login_required
+def students_page():
+    return render_template("students.html", username=current_user.username,
                            school=current_user.school)
 
 
@@ -1453,6 +1581,787 @@ def analytics():
 # ─────────────────────────────────────────────────────────────
 # Error handlers
 # ─────────────────────────────────────────────────────────────
+# الاختبارات الإلكترونية — students, questions, runs, attempts
+#
+# The exam engine is built ON TOP of the existing measurement tools: an exam is
+# just a Tool that has questions attached. Grading scales the paper's points
+# onto that tool's official mark (t.max_score) and writes a normal ScoreEntry,
+# so every existing dashboard / analytics view picks exam results up unchanged.
+# ─────────────────────────────────────────────────────────────
+
+CODE_ALPHABET = "ACDEFGHJKLMNPQRTUVWXY34679"   # no 0/O, 1/I/L-lookalikes, 2/Z, 5/S, 8/B
+EXAM_KINDS = {"اختبار قصير", "اختبار عملي", "الامتحان النهائي", "سؤال قصير"}
+STUDENT_SESSION_KEY = "student_id"
+
+
+def gen_student_code(length=6):
+    """A short, unambiguous, globally-unique login code."""
+    for _ in range(80):
+        code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(length))
+        if not Student.query.filter_by(code=code).first():
+            return code
+    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(length + 3))
+
+
+def utcnow():
+    return datetime.utcnow().replace(microsecond=0)
+
+
+def parse_dt(v):
+    """Parse an ISO-8601 datetime from the browser into naive UTC."""
+    if not v:
+        return None
+    s = str(v).strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.replace(microsecond=0)
+
+
+def iso_dt(dt):
+    return dt.replace(microsecond=0).isoformat() + "Z" if dt else None
+
+
+def _owns_section(s):
+    return s is not None and s.grade.user_id == current_user.id
+
+
+def _owns_tool(t):
+    return t is not None and t.grade.user_id == current_user.id
+
+
+def run_phase(run, now=None):
+    """Derived status: closed / scheduled (not yet) / open / ended."""
+    now = now or utcnow()
+    if run.state == "closed":
+        return "closed"
+    if run.start_at and now < run.start_at:
+        return "scheduled"
+    if run.end_at and now > run.end_at:
+        return "ended"
+    return "open"
+
+
+def run_eligible_students(run):
+    """Who may sit this run.
+
+    Round 1 → every active student in the section.
+    A make-up run with absentees_only → only those who never submitted an
+    earlier round of the SAME tool + section, so present students can't retake.
+    """
+    students = [s for s in run.section.students if s.active]
+    if not run.absentees_only:
+        return students
+    done = {
+        a.student_id
+        for a in db.session.query(ExamAttempt)
+        .join(ExamRun, ExamAttempt.run_id == ExamRun.id)
+        .filter(
+            ExamRun.tool_id == run.tool_id,
+            ExamRun.section_id == run.section_id,
+            ExamRun.id != run.id,
+            ExamAttempt.status == "submitted",
+        )
+        .all()
+    }
+    return [s for s in students if s.id not in done]
+
+
+def tool_total_points(tool):
+    return round(sum(q.points or 0 for q in tool.questions), 2)
+
+
+def _student_json(s, with_code=True):
+    d = {"id": s.id, "name": s.name, "seat_no": s.seat_no, "active": bool(s.active),
+         "section_id": s.section_id}
+    if with_code:
+        d["code"] = s.code
+    return d
+
+
+def _question_json(q, reveal=False):
+    d = {"id": q.id, "text": q.text, "qtype": q.qtype, "options": q.options,
+         "points": q.points, "order": q.order}
+    if reveal:
+        d["correct"] = q.correct
+    return d
+
+
+def _run_json(run, now=None):
+    phase = run_phase(run, now)
+    subs = [a for a in run.attempts if a.status == "submitted"]
+    eligible = run_eligible_students(run)
+    return {
+        "id": run.id,
+        "tool_id": run.tool_id,
+        "tool_name": run.tool.name,
+        "section_id": run.section_id,
+        "section_name": run.section.name,
+        "round_no": run.round_no,
+        "label": run.label,
+        "start_at": iso_dt(run.start_at),
+        "end_at": iso_dt(run.end_at),
+        "duration_min": run.duration_min,
+        "absentees_only": bool(run.absentees_only),
+        "shuffle": bool(run.shuffle),
+        "show_score": bool(run.show_score),
+        "state": run.state,
+        "phase": phase,
+        "eligible": len(eligible),
+        "submitted": len(subs),
+        "in_progress": len([a for a in run.attempts if a.status == "in_progress"]),
+        "avg_percent": round(statistics.mean([a.percentage for a in subs]), 1) if subs else None,
+    }
+
+
+# ── Students (تسجيل الطلبة) ──
+
+@app.route("/api/sections/<int:sid>/students", methods=["GET", "POST"])
+@login_required
+def section_students(sid):
+    s = Section.query.get_or_404(sid)
+    if not _owns_section(s):
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    if request.method == "GET":
+        return jsonify({
+            "section": {"id": s.id, "name": s.name, "grade": s.grade.name,
+                        "student_count": s.student_count or 0},
+            "students": [_student_json(x) for x in s.students],
+        })
+
+    # POST — the short path: paste one name per line and every student gets a code.
+    data = request.get_json(force=True) or {}
+    raw = data.get("names", "")
+    if isinstance(raw, list):
+        names = [str(x).strip() for x in raw]
+    else:
+        names = [ln.strip() for ln in re.split(r"[\n\r]+", str(raw))]
+    # Tolerate "12. اسم الطالب" / "12 - اسم الطالب" / "12<tab>اسم الطالب"
+    names = [re.sub(r"^\s*\d+\s*[-.،)\t]\s*", "", n).strip() for n in names]
+    names = [n for n in names if n]
+
+    # Or: no names at all — just create N placeholder rows with codes.
+    if not names:
+        try:
+            count = int(data.get("count") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count <= 0:
+            return jsonify({"error": "أدخل أسماء الطلبة أو عددهم"}), 400
+        base = len(s.students)
+        names = [f"طالب {base + i + 1}" for i in range(min(count, 200))]
+
+    seat = max([x.seat_no or 0 for x in s.students] or [0])
+    created = []
+    for n in names[:200]:
+        seat += 1
+        st = Student(section_id=sid, name=n[:120], code=gen_student_code(), seat_no=seat)
+        db.session.add(st)
+        created.append(st)
+    db.session.flush()
+    # Keep the anonymous head-count in step with the roster.
+    s.student_count = max(s.student_count or 0, len(s.students))
+    db.session.commit()
+    return jsonify({"added": len(created), "students": [_student_json(x) for x in created]}), 201
+
+
+@app.route("/api/students/<int:stid>", methods=["PUT", "DELETE"])
+@login_required
+def student_detail(stid):
+    st = db.session.get(Student, stid)
+    if st is None:
+        return jsonify({"error": "غير موجود"}), 404
+    if not _owns_section(st.section):
+        return jsonify({"error": "غير مصرّح"}), 403
+    if request.method == "DELETE":
+        sec = st.section
+        db.session.delete(st)
+        db.session.flush()
+        sec.student_count = max(len(sec.students), 0)
+        db.session.commit()
+        return "", 204
+    data = request.get_json(force=True) or {}
+    if data.get("name"):
+        st.name = str(data["name"]).strip()[:120]
+    if "seat_no" in data:
+        st.seat_no = int(data["seat_no"]) if data["seat_no"] not in (None, "") else None
+    if "active" in data:
+        st.active = bool(data["active"])
+    if data.get("new_code"):
+        st.code = gen_student_code()
+    db.session.commit()
+    return jsonify(_student_json(st))
+
+
+# ── Questions (أسئلة الاختبار) ──
+
+@app.route("/api/tools/<int:tid>/questions", methods=["GET", "POST"])
+@login_required
+def tool_questions(tid):
+    t = Tool.query.get_or_404(tid)
+    if not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    if request.method == "GET":
+        return jsonify({
+            "tool": {"id": t.id, "name": t.name, "kind": t.kind, "max_score": t.max_score,
+                     "lesson": t.lesson, "week": t.week},
+            "total_points": tool_total_points(t),
+            "questions": [_question_json(q, reveal=True) for q in t.questions],
+        })
+
+    data = request.get_json(force=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "نص السؤال مطلوب"}), 400
+    qtype = data.get("qtype") if data.get("qtype") in ("mcq", "tf", "text") else "mcq"
+    options = [str(o).strip() for o in (data.get("options") or []) if str(o).strip()]
+    correct = str(data.get("correct") or "").strip()
+
+    if qtype == "mcq":
+        if len(options) < 2:
+            return jsonify({"error": "سؤال الاختيار من متعدد يحتاج خيارين على الأقل"}), 400
+        try:
+            ci = int(correct)
+        except (TypeError, ValueError):
+            return jsonify({"error": "حدّد الخيار الصحيح"}), 400
+        if not 0 <= ci < len(options):
+            return jsonify({"error": "الخيار الصحيح خارج النطاق"}), 400
+        correct = str(ci)
+    elif qtype == "tf":
+        options = []
+        correct = "true" if correct in ("true", "صح", "1", "True") else "false"
+    else:
+        options = []
+
+    q = Question(
+        tool_id=tid, text=text, qtype=qtype,
+        options_json=json.dumps(options, ensure_ascii=False) if options else None,
+        correct=correct,
+        points=float(data.get("points") or 1),
+        order=int(data.get("order") or (len(t.questions) + 1)),
+    )
+    db.session.add(q)
+    db.session.commit()
+    return jsonify({"question": _question_json(q, reveal=True),
+                    "total_points": tool_total_points(t)}), 201
+
+
+@app.route("/api/questions/<int:qid>", methods=["PUT", "DELETE"])
+@login_required
+def question_detail(qid):
+    q = db.session.get(Question, qid)
+    if q is None:
+        return jsonify({"error": "غير موجود"}), 404
+    t = Tool.query.get(q.tool_id)
+    if not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+    if request.method == "DELETE":
+        db.session.delete(q)
+        db.session.commit()
+        return "", 204
+    data = request.get_json(force=True) or {}
+    if data.get("text"):
+        q.text = str(data["text"]).strip()
+    if "points" in data:
+        q.points = float(data["points"] or 1)
+    if "order" in data:
+        q.order = int(data["order"] or 0)
+    if "options" in data:
+        opts = [str(o).strip() for o in (data.get("options") or []) if str(o).strip()]
+        q.options_json = json.dumps(opts, ensure_ascii=False) if opts else None
+    if "correct" in data:
+        q.correct = str(data["correct"]).strip()
+    db.session.commit()
+    return jsonify({"question": _question_json(q, reveal=True),
+                    "total_points": tool_total_points(t)})
+
+
+# ── Runs (تشغيل الاختبار) ──
+
+@app.route("/api/runs", methods=["GET"])
+@login_required
+def list_runs():
+    runs = (
+        db.session.query(ExamRun)
+        .join(Tool, ExamRun.tool_id == Tool.id)
+        .join(Grade, Tool.grade_id == Grade.id)
+        .filter(Grade.user_id == current_user.id)
+        .order_by(ExamRun.start_at.desc().nullslast(), ExamRun.id.desc())
+        .all()
+    )
+    now = utcnow()
+    return jsonify({"now": iso_dt(now), "runs": [_run_json(r, now) for r in runs]})
+
+
+@app.route("/api/tools/<int:tid>/runs", methods=["POST"])
+@login_required
+def create_run(tid):
+    """Run (or re-run) an exam for one section.
+
+    Body: {section_id, start_at, end_at, duration_min, absentees_only,
+           shuffle, show_score}
+    Omit start_at to start right now.
+    """
+    t = Tool.query.get_or_404(tid)
+    if not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+    if not t.questions:
+        return jsonify({"error": "أضِف أسئلة للاختبار قبل تشغيله"}), 400
+
+    data = request.get_json(force=True) or {}
+    sec = db.session.get(Section, int(data.get("section_id") or 0))
+    if not _owns_section(sec):
+        return jsonify({"error": "الشعبة غير موجودة"}), 404
+    if sec.grade_id != t.grade_id:
+        return jsonify({"error": "الأداة لا تخص صف هذه الشعبة"}), 400
+    if not [x for x in sec.students if x.active]:
+        return jsonify({"error": "سجّل طلبة الشعبة أولًا"}), 400
+
+    start_at = parse_dt(data.get("start_at")) or utcnow()
+    end_at = parse_dt(data.get("end_at"))
+    try:
+        duration = int(data.get("duration_min") or 0) or None
+    except (TypeError, ValueError):
+        duration = None
+    if not end_at and duration:
+        end_at = start_at + timedelta(minutes=duration)
+    if end_at and end_at <= start_at:
+        return jsonify({"error": "وقت الإغلاق يجب أن يكون بعد وقت البدء"}), 400
+
+    prev = ExamRun.query.filter_by(tool_id=tid, section_id=sec.id).all()
+    round_no = max([r.round_no or 1 for r in prev] or [0]) + 1
+    absentees_only = bool(data.get("absentees_only")) if round_no > 1 else False
+
+    # A make-up round is pointless if nobody is missing.
+    run = ExamRun(
+        tool_id=tid, section_id=sec.id, round_no=round_no,
+        label=(data.get("label") or ("تشغيل للغائبين" if absentees_only else f"تشغيل {round_no}")),
+        start_at=start_at, end_at=end_at, duration_min=duration,
+        absentees_only=absentees_only,
+        shuffle=bool(data.get("shuffle", True)),
+        show_score=bool(data.get("show_score", True)),
+        state="scheduled",
+    )
+    db.session.add(run)
+    db.session.flush()
+    if absentees_only and not run_eligible_students(run):
+        db.session.rollback()
+        return jsonify({"error": "لا يوجد طلبة غائبون — جميع الطلبة سلّموا الاختبار"}), 400
+    db.session.commit()
+    return jsonify(_run_json(run)), 201
+
+
+@app.route("/api/runs/<int:rid>", methods=["GET", "PUT", "DELETE"])
+@login_required
+def run_detail(rid):
+    run = db.session.get(ExamRun, rid)
+    if run is None:
+        return jsonify({"error": "غير موجود"}), 404
+    if not _owns_tool(run.tool):
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    if request.method == "DELETE":
+        db.session.delete(run)
+        db.session.commit()
+        return "", 204
+
+    if request.method == "PUT":
+        data = request.get_json(force=True) or {}
+        act = data.get("action")
+        if act == "start_now":
+            run.state = "scheduled"
+            run.start_at = utcnow()
+            if run.duration_min:
+                run.end_at = run.start_at + timedelta(minutes=run.duration_min)
+        elif act == "close":
+            run.state = "closed"
+            run.end_at = min(run.end_at or utcnow(), utcnow())
+        elif act == "reopen":
+            run.state = "scheduled"
+            if run.end_at and run.end_at <= utcnow():
+                run.end_at = utcnow() + timedelta(minutes=run.duration_min or 30)
+        elif act == "extend":
+            try:
+                mins = max(1, int(data.get("minutes") or 10))
+            except (TypeError, ValueError):
+                mins = 10
+            run.state = "scheduled"
+            base = run.end_at if (run.end_at and run.end_at > utcnow()) else utcnow()
+            run.end_at = base + timedelta(minutes=mins)
+        else:
+            if "start_at" in data:
+                run.start_at = parse_dt(data["start_at"]) or run.start_at
+            if "end_at" in data:
+                run.end_at = parse_dt(data["end_at"])
+            if "duration_min" in data:
+                run.duration_min = int(data["duration_min"]) if data["duration_min"] not in (None, "") else None
+            for f in ("shuffle", "show_score"):
+                if f in data:
+                    setattr(run, f, bool(data[f]))
+            if run.end_at and run.start_at and run.end_at <= run.start_at:
+                return jsonify({"error": "وقت الإغلاق يجب أن يكون بعد وقت البدء"}), 400
+        db.session.commit()
+
+    # GET (and the response to PUT) — live monitor for this run.
+    now = utcnow()
+    by_student = {a.student_id: a for a in run.attempts}
+    roster = []
+    for st in run_eligible_students(run):
+        a = by_student.get(st.id)
+        roster.append({
+            "student_id": st.id, "name": st.name, "code": st.code, "seat_no": st.seat_no,
+            "attempt_id": (a.id if a else None),
+            "status": (a.status if a else "absent"),
+            "score": (round(a.score, 2) if a and a.status == "submitted" else None),
+            "percentage": (round(a.percentage, 1) if a and a.status == "submitted" else None),
+            "needs_review": bool(a.needs_review) if a else False,
+            "started_at": iso_dt(a.started_at) if a else None,
+            "submitted_at": iso_dt(a.submitted_at) if a else None,
+        })
+    d = _run_json(run, now)
+    d["now"] = iso_dt(now)
+    d["total_points"] = tool_total_points(run.tool)
+    d["max_score"] = run.tool.max_score
+    d["roster"] = roster
+    d["absent"] = [r for r in roster if r["status"] == "absent"]
+    return jsonify(d)
+
+
+@app.route("/api/runs/<int:rid>/sync", methods=["POST"])
+@login_required
+def run_sync(rid):
+    """Re-write this run's results into ScoreEntry.
+
+    Pasting a column of scores (or an Excel import) with "replace" clears every
+    row for that section + tool, exam results included. The attempts themselves
+    are untouched, so this rebuilds the score rows from them.
+    """
+    run = db.session.get(ExamRun, rid)
+    if run is None:
+        return jsonify({"error": "غير موجود"}), 404
+    if not _owns_tool(run.tool):
+        return jsonify({"error": "غير مصرّح"}), 403
+    n = 0
+    for a in run.attempts:
+        if a.status == "submitted":
+            _finalize_attempt(a, a.raw_points or 0, a.total_points or 0,
+                              manual=not a.needs_review)
+            n += 1
+    db.session.commit()
+    return jsonify({"synced": n})
+
+
+@app.route("/api/runs/<int:rid>/attempts/<int:aid>", methods=["GET", "PUT"])
+@login_required
+def attempt_review(rid, aid):
+    """Read one student's paper, and re-mark open-text answers by hand."""
+    a = db.session.get(ExamAttempt, aid)
+    if a is None or a.run_id != rid:
+        return jsonify({"error": "غير موجود"}), 404
+    run = a.run
+    if not _owns_tool(run.tool):
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    if request.method == "PUT":
+        data = request.get_json(force=True) or {}
+        awarded = data.get("points") or {}
+        answers = a.answers
+        earned = 0.0
+        for q in run.tool.questions:
+            key = str(q.id)
+            if key in awarded:
+                try:
+                    pts = max(0.0, min(float(q.points or 0), float(awarded[key])))
+                except (TypeError, ValueError):
+                    pts = 0.0
+                answers.setdefault(key, {})["points"] = pts
+            earned += float((answers.get(key) or {}).get("points") or 0)
+        a.answers_json = json.dumps(answers, ensure_ascii=False)
+        _finalize_attempt(a, earned, tool_total_points(run.tool), manual=True)
+        db.session.commit()
+
+    answers = a.answers
+    return jsonify({
+        "attempt": {
+            "id": a.id, "student": a.student.name, "code": a.student.code,
+            "status": a.status, "score": a.score, "max_score": run.tool.max_score,
+            "raw_points": a.raw_points, "total_points": a.total_points,
+            "percentage": a.percentage, "needs_review": bool(a.needs_review),
+            "started_at": iso_dt(a.started_at), "submitted_at": iso_dt(a.submitted_at),
+        },
+        "questions": [
+            dict(_question_json(q, reveal=True),
+                 given=(answers.get(str(q.id)) or {}).get("value"),
+                 awarded=(answers.get(str(q.id)) or {}).get("points"))
+            for q in run.tool.questions
+        ],
+    })
+
+
+# ── Grading ──
+
+def _norm_text(v):
+    v = re.sub(r"[ً-ْـ]", "", str(v or ""))          # harakat + tatweel
+    v = v.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    v = v.replace("ى", "ي").replace("ة", "ه")
+    return re.sub(r"\s+", " ", v).strip().casefold()
+
+
+def grade_answers(tool, answers):
+    """Auto-mark a submission. Returns (earned, total, detail, needs_review)."""
+    earned, total, needs_review = 0.0, 0.0, False
+    detail = {}
+    for q in tool.questions:
+        pts = float(q.points or 0)
+        total += pts
+        given = answers.get(str(q.id))
+        got = 0.0
+        if q.qtype == "mcq":
+            try:
+                got = pts if int(given) == int(q.correct) else 0.0
+            except (TypeError, ValueError):
+                got = 0.0
+        elif q.qtype == "tf":
+            want = (q.correct or "").lower() == "true"
+            got = pts if (given is True or str(given).lower() in ("true", "صح", "1")) == want else 0.0
+        else:
+            accepted = [_norm_text(x) for x in str(q.correct or "").split("|") if str(x).strip()]
+            if accepted:
+                got = pts if _norm_text(given) in accepted else 0.0
+            else:
+                needs_review = True       # no model answer → the teacher marks it
+                got = 0.0
+        earned += got
+        detail[str(q.id)] = {"value": given, "points": round(got, 2)}
+    return round(earned, 2), round(total, 2), detail, needs_review
+
+
+def _finalize_attempt(a, earned, total, manual=False):
+    """Scale the paper onto the tool's official mark and mirror to ScoreEntry."""
+    run = a.run
+    tool = run.tool
+    max_score = float(tool.max_score or 100)
+    a.raw_points = earned
+    a.total_points = total
+    a.score = round((earned / total) * max_score, 2) if total else 0.0
+    a.percentage = round((earned / total) * 100, 2) if total else 0.0
+    a.status = "submitted"
+    a.submitted_at = a.submitted_at or utcnow()
+    if manual:
+        a.needs_review = False
+
+    entry = ScoreEntry.query.filter_by(
+        section_id=run.section_id, tool_id=tool.id, student_id=a.student_id
+    ).first()
+    if entry is None:
+        entry = ScoreEntry(section_id=run.section_id, tool_id=tool.id,
+                           student_id=a.student_id, source="exam")
+        db.session.add(entry)
+    entry.score = a.score
+    entry.max_score = max_score
+    entry.percentage = a.percentage
+    entry.source = "exam"
+    # Record when the assessment actually happened, like manual entry does.
+    if not tool.applied_date:
+        tool.applied_date = (run.start_at or utcnow()).date()
+
+
+# ─────────────────────────────────────────────────────────────
+# Student side — code login, then sit the exam
+# ─────────────────────────────────────────────────────────────
+
+def current_student():
+    sid = session.get(STUDENT_SESSION_KEY)
+    return db.session.get(Student, sid) if sid else None
+
+
+@app.route("/exam")
+def student_exam_page():
+    return render_template("student.html")
+
+
+@app.route("/api/student/login", methods=["POST"])
+def student_login():
+    data = request.get_json(force=True) or {}
+    code = re.sub(r"\s+", "", str(data.get("code") or "")).upper()
+    st = Student.query.filter_by(code=code).first() if code else None
+    if st is None or not st.active:
+        return jsonify({"error": "رمز غير صحيح — تأكد من الرمز الذي أعطاك إياه معلّمك"}), 404
+    session[STUDENT_SESSION_KEY] = st.id
+    session.permanent = False
+    return jsonify({"student": {"id": st.id, "name": st.name,
+                                "section": st.section.name, "grade": st.section.grade.name}})
+
+
+@app.route("/api/student/logout", methods=["POST"])
+def student_logout():
+    session.pop(STUDENT_SESSION_KEY, None)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/student/me")
+def student_me():
+    st = current_student()
+    if st is None:
+        return jsonify({"error": "سجّل الدخول برمزك"}), 401
+    now = utcnow()
+    done = {a.run_id: a for a in ExamAttempt.query.filter_by(student_id=st.id).all()}
+    exams = []
+    for run in ExamRun.query.filter_by(section_id=st.section_id).order_by(ExamRun.id.desc()).all():
+        if st.id not in {x.id for x in run_eligible_students(run)}:
+            continue
+        a = done.get(run.id)
+        phase = run_phase(run, now)
+        deadline = run.end_at
+        if a and run.duration_min and a.status == "in_progress":
+            personal = a.started_at + timedelta(minutes=run.duration_min)
+            deadline = min(deadline, personal) if deadline else personal
+        exams.append({
+            "run_id": run.id,
+            "tool": run.tool.name,
+            "lesson": run.tool.lesson,
+            "round_no": run.round_no,
+            "label": run.label,
+            "questions": len(run.tool.questions),
+            "max_score": run.tool.max_score,
+            "duration_min": run.duration_min,
+            "start_at": iso_dt(run.start_at),
+            "end_at": iso_dt(run.end_at),
+            "deadline": iso_dt(deadline),
+            "phase": phase,
+            "attempt_status": (a.status if a else None),
+            "score": (round(a.score, 2) if a and a.status == "submitted" and run.show_score else None),
+            "percentage": (round(a.percentage, 1) if a and a.status == "submitted" and run.show_score else None),
+            "show_score": bool(run.show_score),
+            "can_enter": phase == "open" and (a is None or a.status == "in_progress"),
+        })
+    return jsonify({
+        "now": iso_dt(now),
+        "student": {"id": st.id, "name": st.name, "code": st.code,
+                    "section": st.section.name, "grade": st.section.grade.name},
+        "exams": exams,
+    })
+
+
+@app.route("/api/student/runs/<int:rid>", methods=["GET", "POST"])
+def student_run(rid):
+    """GET → the paper (no answers). POST → start the attempt (stamps the clock)."""
+    st = current_student()
+    if st is None:
+        return jsonify({"error": "سجّل الدخول برمزك"}), 401
+    run = db.session.get(ExamRun, rid)
+    if run is None or run.section_id != st.section_id:
+        return jsonify({"error": "الاختبار غير متاح"}), 404
+    if st.id not in {x.id for x in run_eligible_students(run)}:
+        return jsonify({"error": "هذا التشغيل مخصّص للطلبة الغائبين فقط"}), 403
+
+    now = utcnow()
+    phase = run_phase(run, now)
+    if phase == "scheduled":
+        return jsonify({"error": "لم يبدأ الاختبار بعد", "phase": phase,
+                        "start_at": iso_dt(run.start_at)}), 423
+    if phase in ("ended", "closed"):
+        return jsonify({"error": "أُغلق الاختبار", "phase": phase}), 423
+
+    a = ExamAttempt.query.filter_by(run_id=rid, student_id=st.id).first()
+    if a and a.status == "submitted":
+        return jsonify({"error": "سلّمت هذا الاختبار بالفعل", "phase": "submitted"}), 409
+    if a is None:
+        if request.method != "POST":
+            return jsonify({"error": "ابدأ الاختبار أولًا", "phase": phase}), 409
+        a = ExamAttempt(run_id=rid, student_id=st.id, started_at=now,
+                        total_points=tool_total_points(run.tool))
+        db.session.add(a)
+        db.session.commit()
+
+    deadline = run.end_at
+    if run.duration_min:
+        personal = a.started_at + timedelta(minutes=run.duration_min)
+        deadline = min(deadline, personal) if deadline else personal
+
+    qs = list(run.tool.questions)
+    if run.shuffle:
+        # Stable per-student shuffle: the same order on every reload.
+        qs.sort(key=lambda q: hashlib.md5(f"{a.id}:{q.id}".encode()).hexdigest())
+
+    saved = a.answers
+    return jsonify({
+        "run_id": run.id,
+        "tool": run.tool.name,
+        "lesson": run.tool.lesson,
+        "max_score": run.tool.max_score,
+        "total_points": tool_total_points(run.tool),
+        "now": iso_dt(now),
+        "deadline": iso_dt(deadline),
+        "started_at": iso_dt(a.started_at),
+        "questions": [
+            dict(_question_json(q), saved=(saved.get(str(q.id)) or {}).get("value"))
+            for q in qs
+        ],
+    })
+
+
+@app.route("/api/student/runs/<int:rid>/save", methods=["POST"])
+def student_save(rid):
+    """Autosave answers mid-exam so nothing is lost if the tab closes."""
+    st = current_student()
+    if st is None:
+        return jsonify({"error": "سجّل الدخول برمزك"}), 401
+    a = ExamAttempt.query.filter_by(run_id=rid, student_id=st.id).first()
+    if a is None or a.status == "submitted":
+        return jsonify({"error": "لا توجد محاولة جارية"}), 409
+    data = request.get_json(force=True) or {}
+    incoming = data.get("answers") or {}
+    answers = a.answers
+    for q in a.run.tool.questions:
+        k = str(q.id)
+        if k in incoming:
+            answers.setdefault(k, {})["value"] = incoming[k]
+    a.answers_json = json.dumps(answers, ensure_ascii=False)
+    db.session.commit()
+    return jsonify({"saved": True})
+
+
+@app.route("/api/student/runs/<int:rid>/submit", methods=["POST"])
+def student_submit(rid):
+    st = current_student()
+    if st is None:
+        return jsonify({"error": "سجّل الدخول برمزك"}), 401
+    run = db.session.get(ExamRun, rid)
+    if run is None or run.section_id != st.section_id:
+        return jsonify({"error": "الاختبار غير متاح"}), 404
+    a = ExamAttempt.query.filter_by(run_id=rid, student_id=st.id).first()
+    if a is None:
+        return jsonify({"error": "لم تبدأ هذا الاختبار"}), 409
+    if a.status == "submitted":
+        return jsonify({"error": "سلّمت هذا الاختبار بالفعل"}), 409
+
+    data = request.get_json(force=True) or {}
+    incoming = data.get("answers") or {}
+    answers = {k: v.get("value") for k, v in a.answers.items()}
+    answers.update({str(k): v for k, v in incoming.items()})
+
+    earned, total, detail, needs_review = grade_answers(run.tool, answers)
+    a.answers_json = json.dumps(detail, ensure_ascii=False)
+    a.needs_review = needs_review
+    _finalize_attempt(a, earned, total)
+    db.session.commit()
+
+    out = {"submitted": True, "needs_review": needs_review}
+    if run.show_score and not needs_review:
+        out.update({"score": a.score, "max_score": run.tool.max_score,
+                    "percentage": a.percentage, "band": band_of(a.percentage)})
+    return jsonify(out)
+
+
+# ─────────────────────────────────────────────────────────────
 
 @app.errorhandler(404)
 def not_found(e):
@@ -1481,6 +2390,9 @@ def ensure_columns():
     wanted = {
         "user": [("term_name", "VARCHAR(120)"), ("term_start", "DATE")],
         "tool": [("applied_date", "DATE")],
+        "score_entry": [("student_id", "INTEGER"), ("source", "VARCHAR(12)")],
+        "student": [("seat_no", "INTEGER")],
+        "exam_run": [("label", "VARCHAR(120)"), ("show_score", "BOOLEAN")],
     }
     for table, cols in wanted.items():
         try:

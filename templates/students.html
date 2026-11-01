@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الطلبة — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr-shell.css') }}">
+<style>
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px}
+.scard{border:1px solid #E6E8EE;border-radius:12px;padding:12px 13px;background:#fff}
+.scard .nm{font-weight:600;font-size:13.5px;margin-bottom:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scard .bot{display:flex;align-items:center;gap:8px}
+.scard .seat{font-size:11px;color:#8A93A3;margin-inline-start:auto}
+.off{opacity:.5}
+.link{background:none;border:none;color:#2D5BFF;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px}
+.link.del{color:#B42318}
+.howto{background:#F8FAFF;border:1px solid #E1E8FF;border-radius:12px;padding:14px 16px;font-size:13px;color:#3A4150;line-height:1.9}
+.howto b{color:#15171E}
+</style>
+</head>
+<body>
+{{ ui.loader() }}
+<div class="app">
+  {{ ui.sidenav('students', username, school) }}
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">سجّل طلبة كل شعبة في خطوة واحدة — ويحصل كل طالب على رمز دخول</div><h1>تسجيل الطلبة</h1></div>
+      <div class="spacer"></div>
+      <button class="btn ghost noprint" onclick="window.print()">طباعة الرموز</button>
+    </header>
+
+    <div class="body">
+      <div id="noGrades" class="card" style="display:none;text-align:center;padding:40px">
+        <div style="font-weight:600;font-size:16px;margin-bottom:6px">لا توجد صفوف بعد</div>
+        <p class="muted" style="margin-bottom:18px">هيّئ صفوفك وشُعبك أولًا، ثم عُد لتسجيل الطلبة.</p>
+        <a class="btn" style="display:inline-flex" href="{{ url_for('setup_page') }}">إعداد الصفوف</a>
+      </div>
+
+      <div id="wrap" style="display:none;flex-direction:column;gap:20px">
+        <div class="card noprint">
+          <div class="hd"><h3>اختر الشعبة</h3><div class="spacer"></div><span class="toast" id="toast"></span></div>
+          <div class="pickers" style="margin-top:14px">
+            <div><label>الصف</label><select id="grade" onchange="onGrade()"></select></div>
+            <div><label>الشعبة</label><select id="section" onchange="load()"></select></div>
+          </div>
+        </div>
+
+        <div class="card noprint">
+          <div class="hd"><h3>إضافة سريعة</h3></div>
+          <p class="lead">الصق أسماء الطلبة — <b>اسم في كل سطر</b> — واضغط «تسجيل». تُحذف الأرقام التسلسلية تلقائيًا، ويُولَّد لكل طالب رمز دخول مختصر فورًا.</p>
+          <textarea id="names" rows="6" placeholder="محمد علي الهنائي&#10;سارة سالم البلوشية&#10;3. يوسف خالد الكندي"></textarea>
+          <div style="display:flex;gap:10px;align-items:end;margin-top:13px;flex-wrap:wrap">
+            <button class="btn" onclick="addNames()">تسجيل الطلبة</button>
+            <span class="muted" style="margin:0 6px">أو</span>
+            <div style="max-width:140px"><label>عدد بدون أسماء</label><input type="number" id="count" min="1" max="200" placeholder="24"></div>
+            <button class="btn ghost" onclick="addCount()">توليد رموز فقط</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <h3>طلبة الشعبة <span class="pill" id="cnt">0</span></h3>
+            <div class="spacer"></div>
+            <span class="muted noprint">رابط دخول الطلبة: <span class="code">{{ request.host_url }}exam</span></span>
+          </div>
+          <p class="lead">يفتح الطالب رابط الاختبار ويُدخل رمزه — لا يحتاج حسابًا ولا كلمة مرور.</p>
+          <div class="cards" id="list"></div>
+          <div class="empty" id="listEmpty">لا طلبة في هذه الشعبة بعد — استخدم الإضافة السريعة بالأعلى.</div>
+        </div>
+
+        <div class="howto noprint">
+          <b>الخطوة التالية:</b> انتقل إلى <a href="{{ url_for('exams_page') }}" style="color:#2D5BFF;font-weight:600">الاختبارات الإلكترونية</a>
+          لإضافة أسئلة لأي أداة قياس ثم تشغيل الاختبار للشعبة في الوقت الذي تحدده.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const el=id=>document.getElementById(id);
+const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let STRUCTURE=[];
+function toast(m,ok=true){const t=el('toast');t.className='toast '+(ok?'ok':'err');t.textContent=m;setTimeout(()=>t.className='toast',3800);}
+function curSid(){return el('section').value;}
+
+function onGrade(){
+  const g=STRUCTURE.find(x=>String(x.id)===el('grade').value);
+  el('section').innerHTML=(g&&g.sections||[]).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')
+    || '<option value="">— لا شُعب —</option>';
+  load();
+}
+
+async function load(){
+  const sid=curSid(); if(!sid){el('list').innerHTML='';el('listEmpty').style.display='block';el('cnt').textContent='0';return;}
+  const d=await fetch(`/api/sections/${sid}/students`).then(r=>r.json());
+  const st=d.students||[];
+  el('cnt').textContent=st.length;
+  el('listEmpty').style.display=st.length?'none':'block';
+  el('list').innerHTML=st.map(s=>`
+    <div class="scard ${s.active?'':'off'}">
+      <div class="nm" title="${esc(s.name)}">${esc(s.name)}</div>
+      <div class="bot">
+        <span class="code">${esc(s.code)}</span>
+        <span class="seat">${s.seat_no??''}</span>
+      </div>
+      <div class="bot noprint" style="margin-top:7px">
+        <button class="link" onclick="newCode(${s.id})">رمز جديد</button>
+        <button class="link" onclick="rename(${s.id},'${esc(s.name).replace(/'/g,"\\'")}')">تعديل</button>
+        <button class="link del" onclick="del(${s.id})">حذف</button>
+      </div>
+    </div>`).join('');
+}
+
+async function addNames(){
+  const sid=curSid(); if(!sid){toast('اختر شعبة',false);return;}
+  const names=el('names').value.trim(); if(!names){toast('الصق أسماء الطلبة',false);return;}
+  const r=await jreq(`/api/sections/${sid}/students`,{names});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){el('names').value='';await load();toast(`تم تسجيل ${d.added} طالب`);}
+  else toast(d.error||'تعذّر التسجيل',false);
+}
+async function addCount(){
+  const sid=curSid(); if(!sid){toast('اختر شعبة',false);return;}
+  const count=parseInt(el('count').value||'0',10); if(!count){toast('اكتب عدد الطلبة',false);return;}
+  const r=await jreq(`/api/sections/${sid}/students`,{count});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){el('count').value='';await load();toast(`تم توليد ${d.added} رمز`);}
+  else toast(d.error||'تعذّر التوليد',false);
+}
+async function newCode(id){const r=await jreq(`/api/students/${id}`,{new_code:true},'PUT');if(r.ok){await load();toast('تم توليد رمز جديد');}}
+async function rename(id,cur){const n=prompt('اسم الطالب',cur);if(n==null)return;const r=await jreq(`/api/students/${id}`,{name:n},'PUT');if(r.ok){await load();toast('تم التعديل');}}
+async function del(id){if(!confirm('حذف هذا الطالب؟ ستُحذف نتائجه في الاختبارات.'))return;const r=await fetch(`/api/students/${id}`,{method:'DELETE'});if(r.ok){await load();toast('تم الحذف');}}
+
+async function init(){
+  try{const r=await fetch('/api/structure');STRUCTURE=r.ok?await r.json():[];}catch(e){STRUCTURE=[];}
+  if(!Array.isArray(STRUCTURE))STRUCTURE=[];
+  const has=STRUCTURE.some(g=>(g.sections||[]).length);
+  el('noGrades').style.display=has?'none':'block';
+  el('wrap').style.display=has?'flex':'none';
+  if(!has)return;
+  el('grade').innerHTML=STRUCTURE.filter(g=>(g.sections||[]).length).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  onGrade();
+}
+window.__mnrManualLoader=true;
+init().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+</script>
+</body>
+</html>

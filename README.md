@@ -85,6 +85,21 @@ teaching-moniter-gate/
 
 ## 🎯 Key Features
 
+### 📝 Online Exams ⭐ NEW — الاختبارات الإلكترونية
+- Short student registration: paste one name per line, every student gets a 6-char login code
+- Students sit the exam at `/exam` with that code — no account, no password
+- Any existing measurement tool becomes an exam by adding questions (MCQ / true-false / short answer)
+- Question points are scaled onto the tool's official mark and written to the normal score log,
+  so the dashboard and analytics pick exam results up unchanged
+- Scheduled windows: the exam opens and closes itself at the times the teacher sets,
+  plus an optional per-student time limit
+- Run it once, then **run it again for absentees only** — students who already
+  submitted can't see or re-enter it, and the first round's results are untouched
+- Live monitor per run: submitted / in progress / absent, average, and per-paper manual marking
+
+**👉 Full guide (Arabic): [EXAMS.md](EXAMS.md)**
+
+
 ### 👥 Student Management
 - Add/manage students
 - Organize by grades & sections

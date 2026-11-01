@@ -1,0 +1,77 @@
+/* المنارة — shared app shell (sidebar + cards + controls) */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.app{display:flex;flex-wrap:wrap;min-height:100vh}
+.side{width:252px;flex:0 0 252px;background:#15171E;color:#C7CCD6;padding:24px 18px;display:flex;flex-direction:column;gap:22px}
+.brand{display:flex;align-items:center;gap:11px;padding:0 6px}
+.brand .name{font-weight:700;color:#fff;font-size:17px}
+.brand .sub{font-size:11px;color:#8A93A3}
+.navlabel{font-size:11px;color:#6B7486;padding:0 10px;margin-bottom:8px}
+.nav{display:flex;flex-direction:column;gap:3px}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-size:14px;font-weight:500;color:#AEB5C2}
+.nav a:hover{background:#20232D;color:#fff}
+.nav a.on{background:#262A36;color:#fff}
+.nav svg{width:17px;height:17px;flex:0 0 17px;stroke-width:1.9}
+.side .foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#20232D}
+.side .foot .av{width:34px;height:34px;border-radius:50%;background:#394052;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:0 0 34px}
+.side .foot .nm{font-size:13px;color:#fff;font-weight:600}
+.side .foot .rl{font-size:11px;color:#8A93A3}
+.side .foot a{margin-inline-start:auto;color:#8A93A3;display:flex}
+.main{flex:999 1 620px;min-width:0;display:flex;flex-direction:column}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:22px 34px;border-bottom:1px solid #E6E8EE;background:#fff}
+.top h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.01em}
+.top .crumb{font-size:12.5px;color:#646D7E;margin-bottom:3px}
+.top .spacer{margin-inline-start:auto}
+.body{padding:26px 34px 48px;display:flex;flex-direction:column;gap:20px;max-width:1040px}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:16px;padding:22px 24px}
+.card .hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.card .hd h3{margin:0;font-size:16px;font-weight:600}
+.card .hd .spacer{margin-inline-start:auto}
+.card .lead{font-size:13px;color:#646D7E;margin:4px 0 18px;line-height:1.7}
+label{display:block;font-size:12.5px;font-weight:600;color:#3A4150;margin-bottom:6px}
+input,select,textarea{font:inherit;color:#15171E;background:#fff;border:1px solid #E6E8EE;border-radius:10px;padding:0 12px;height:42px;font-size:14px;width:100%}
+textarea{height:auto;padding:11px 12px;line-height:1.8;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3px rgba(45,91,255,.12)}
+input[type=number]{direction:ltr;text-align:center}
+.pickers{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 18px;border-radius:10px;background:#2D5BFF;color:#fff;font:inherit;font-size:14px;font-weight:600;border:none;cursor:pointer;white-space:nowrap}
+.btn:hover{background:#2348cf}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:#fff;color:#3A4150;border:1px solid #E6E8EE}.btn.ghost:hover{background:#F4F5F8}
+.btn.sm{height:36px;padding:0 13px;font-size:13px}
+.btn.xs{height:30px;padding:0 10px;font-size:12px;border-radius:8px}
+.btn.danger{background:#fff;color:#B42318;border:1px solid #F3D4D4}.btn.danger:hover{background:#FBECEC}
+.btn.go{background:#0F9488}.btn.go:hover{background:#0C7266}
+.muted{font-size:12.5px;color:#8A93A3}
+.toast{display:none;align-items:center;gap:8px;font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:10px}
+.toast.ok{display:inline-flex;background:#E2F5F2;color:#0C7266}
+.toast.err{display:inline-flex;background:#FBECEC;color:#B42318}
+.pill{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap;background:#EEF2FF;color:#2D5BFF}
+.pill.open{background:#E2F5F2;color:#0C7266}
+.pill.scheduled{background:#EEF2FF;color:#2D5BFF}
+.pill.ended,.pill.closed{background:#F1F2F6;color:#646D7E}
+.pill.warn{background:#FFF6E6;color:#A8681B}
+.pill.err{background:#FBECEC;color:#B42318}
+.code{direction:ltr;unicode-bidi:isolate;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;letter-spacing:.12em;background:#F4F5F8;border:1px solid #E6E8EE;border-radius:8px;padding:3px 9px;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:start;font-size:11.5px;font-weight:600;color:#6B7486;padding:8px 10px;border-bottom:1px solid #E6E8EE;white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid #F0F2F6;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.rows{display:flex;flex-direction:column;gap:9px}
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #E6E8EE;border-radius:12px;background:#fff;flex-wrap:wrap}
+.row .info{flex:1;min-width:140px}
+.row .t{font-weight:600;font-size:14px}
+.row .u{font-size:12px;color:#8A93A3;margin-top:2px}
+.empty{text-align:center;padding:34px 18px;color:#8A93A3;font-size:13.5px}
+.tabs{display:inline-flex;border:1px solid #E6E8EE;border-radius:10px;overflow:hidden;background:#fff}
+.tabs button{height:38px;padding:0 16px;border:none;background:#fff;font:inherit;font-size:13.5px;font-weight:600;color:#646D7E;cursor:pointer;border-inline-start:1px solid #E6E8EE}
+.tabs button:first-child{border-inline-start:none}
+.tabs button.on{background:#2D5BFF;color:#fff}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+.stat{border:1px solid #E6E8EE;border-radius:12px;padding:13px 15px;background:#FBFCFE}
+.stat .v{font-size:22px;font-weight:700;line-height:1.2}
+.stat .k{font-size:11.5px;color:#6B7486;margin-top:2px}
+@media print{.side,.top,.noprint{display:none!important}.body{padding:0;max-width:none}.card{border:none}}

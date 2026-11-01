@@ -91,6 +91,13 @@ input[type=number]{direction:ltr;text-align:center}
         <a href="{{ url_for('lessons_page') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>تتبّع الدروس</a>
       </nav>
     </div>
+    <div>
+      <div class="navlabel">الاختبارات</div>
+      <nav class="nav">
+        <a href="{{ url_for('students_page') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11"/></svg>تسجيل الطلبة</a>
+        <a href="{{ url_for('exams_page') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 7-7"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>الاختبارات الإلكترونية</a>
+      </nav>
+    </div>
     <div class="foot">
       <span class="av">{{ username[0]|upper }}</span>
       <span><span class="nm">{{ username }}</span><br><span class="rl">معلّم</span></span>
