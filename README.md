@@ -87,7 +87,11 @@ teaching-moniter-gate/
 
 ### 📝 Online Exams ⭐ NEW — الاختبارات الإلكترونية
 - Short student registration: paste one name per line, every student gets a 6-char login code
-- Students sit the exam at `/exam` with that code — no account, no password
+- Students sign in at `/exam` with their number alone — no username, no password.
+  Generated numbers are random, not sequential, so one student cannot reach another's
+  page by trying the number next to their own
+- Each student sees their own page, by name: the exams open to them now, and **نتائجي** —
+  every mark their teacher has recorded, from online exams and hand-marked papers alike
 - Any existing measurement tool becomes an exam by adding questions (MCQ / true-false / short answer)
 - Question points are scaled onto the tool's official mark and written to the normal score log,
   so the dashboard and analytics pick exam results up unchanged
@@ -95,15 +99,21 @@ teaching-moniter-gate/
   plus an optional per-student time limit
 - Run it once, then **run it again for absentees only** — students who already
   submitted can't see or re-enter it, and the first round's results are untouched
+- Or open a run to **named students only**, with one click to select everyone who
+  hasn't submitted; students off the list never see the exam at all
 - Live monitor per run: submitted / in progress / absent, average, and per-paper manual marking
 
-### ⚡ Fast setup by upload
+### ⚡ Fast upload
 - **Roster upload** — drop an .xlsx/.csv of the section; the name column is detected
-  automatically, serial prefixes and blank rows are stripped, duplicates are flagged,
-  and the whole thing is previewed before anything is written
+  automatically, the school's own student-number column becomes each student's login
+  number, serial prefixes and blank rows are stripped, duplicates and number clashes
+  are flagged, and the whole thing is previewed before anything is written
+- **Marks upload** — download the roster pre-filled with names and numbers, type the
+  scores, upload it back; each mark is matched to its student by number (or name),
+  with unmatched rows and out-of-range values shown before saving
 - **Question-sheet upload** — a whole exam paper from one spreadsheet; the correct
   answer is accepted as a letter (أ), a number (1), or the option text
-- Ready-made templates and an Excel export of every student's login code
+- Ready-made templates and an Excel export of every student's login number
 
 ### ✅ Per-student marking — تقييم الطلبة
 Activities, projects and dialogue are marked against the **named roster**, not as an

@@ -29,7 +29,7 @@
   {{ ui.sidenav('students', username, school) }}
   <div class="main">
     <header class="top">
-      <div><div class="crumb">ارفع كشف الشعبة أو الصق الأسماء — ويحصل كل طالب على رمز دخول</div><h1>تسجيل الطلبة</h1></div>
+      <div><div class="crumb">ارفع كشف الشعبة بأرقام الطلبة — أو الصق الأسماء وتُولَّد الأرقام تلقائيًا</div><h1>تسجيل الطلبة</h1></div>
       <div class="spacer"></div>
       <span class="toast" id="toast"></span>
     </header>
@@ -45,7 +45,7 @@
         <div class="steps noprint">
           <span class="step" id="st1"><b>1</b> اختر الشعبة</span>
           <span class="step" id="st2"><b>2</b> ارفع الكشف أو الصق الأسماء</span>
-          <span class="step" id="st3"><b>3</b> وزّع الرموز</span>
+          <span class="step" id="st3"><b>3</b> وزّع الأرقام</span>
         </div>
 
         <div class="card noprint">
@@ -59,13 +59,14 @@
         <div class="card noprint">
           <div class="hd"><h3>رفع سريع</h3><div class="spacer"></div>
             <a class="btn ghost sm" id="tplLink" href="#">تحميل القالب</a></div>
-          <p class="lead">ارفع كشف الشعبة من Excel أو CSV — يتعرّف النظام على عمود الأسماء تلقائيًا،
-            ويتجاهل الأرقام التسلسلية والصفوف الفارغة، وينبّهك للأسماء المكرّرة <b>قبل</b> الحفظ.</p>
+          <p class="lead">ارفع كشف الشعبة من Excel أو CSV. يتعرّف النظام على عمود الأسماء تلقائيًا، ويقرأ
+            <b>رقم الطالب</b> من الملف ليكون هو رقم دخوله للمنصة — ومن لا رقم له يُولَّد له واحد.
+            ويتجاهل الأرقام التسلسلية والصفوف الفارغة، وينبّهك للمكرّر <b>قبل</b> الحفظ.</p>
 
           <div class="drop" id="drop" onclick="document.getElementById('file').click()">
             <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5-5 5 5M12 5v13"/></svg></div>
             <div class="t">اسحب الملف هنا أو اضغط للاختيار</div>
-            <div class="s">Excel ‏(.xlsx) أو CSV — أو استخدم القالب الجاهز للضمان</div>
+            <div class="s">Excel ‏(.xlsx) أو CSV — أعمدة: الاسم، ورقم الطالب (اختياري)</div>
           </div>
           <input type="file" id="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="pick(this.files[0])">
           <div id="prev"></div>
@@ -78,7 +79,7 @@
             <button class="btn" onclick="addNames()">تسجيل الأسماء</button>
             <span class="muted" style="margin:0 4px;align-self:center">أو</span>
             <div style="max-width:150px"><label>عدد بدون أسماء</label><input type="number" id="count" min="1" max="200" placeholder="24"></div>
-            <button class="btn ghost" onclick="addCount()">توليد رموز فقط</button>
+            <button class="btn ghost" onclick="addCount()">توليد أرقام فقط</button>
           </div>
         </div>
 
@@ -88,13 +89,13 @@
             <div class="spacer"></div>
             <span class="search noprint">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-              <input id="q" placeholder="ابحث باسم أو رمز" oninput="draw()">
+              <input id="q" placeholder="ابحث باسم أو رقم" oninput="draw()">
             </span>
             <a class="btn ghost sm noprint" id="xlsxLink" href="#">تصدير Excel</a>
-            <button class="btn ghost sm noprint" onclick="window.print()">طباعة البطاقات</button>
+            <button class="btn ghost sm noprint" onclick="window.print()">طباعة الأرقام</button>
           </div>
           <p class="lead">رابط دخول الطلبة: <span class="code">{{ request.host_url }}exam</span> —
-            يفتحه الطالب ويُدخل رمزه، بلا حساب وبلا كلمة مرور.</p>
+            يفتحه الطالب ويُدخل <b>رقمه</b>، بلا اسم مستخدم وبلا كلمة مرور.</p>
           <div class="cards" id="list"></div>
           <div class="empty" id="listEmpty">لا طلبة في هذه الشعبة بعد — ارفع الكشف أو الصق الأسماء بالأعلى.</div>
         </div>
@@ -149,8 +150,9 @@ function draw(){
       <div class="nm" title="${esc(s.name)}">${esc(s.name)}</div>
       <div class="bot"><span class="code">${esc(s.code)}</span><span class="seat">${s.seat_no??''}</span></div>
       <div class="acts noprint">
-        <button class="linkbtn" onclick="newCode(${s.id})">رمز جديد</button>
+        <button class="linkbtn" onclick="newCode(${s.id})">رقم جديد</button>
         <button class="linkbtn" onclick="rename(${s.id})">تعديل</button>
+        <button class="linkbtn" onclick="setNum(${s.id})">تغيير الرقم</button>
         <button class="linkbtn del" onclick="del(${s.id})">حذف</button>
       </div>
     </div>`).join('');
@@ -201,6 +203,9 @@ function showPreview(d,fname){
   if(d.duplicates)warn.push(`<b>${d.duplicates}</b> اسمًا مكرّرًا سيُتجاهَل (${d.duplicate_names.slice(0,4).map(esc).join('، ')}${d.duplicates>4?' …':''})`);
   if(d.ignored)warn.push(`<b>${d.ignored}</b> صفًا غير صالح تُجوهل`);
   if(d.over_limit)warn.push(`الحد الأقصى 300 اسم في الرفعة الواحدة — سيُضاف أول 300 فقط`);
+  if(d.number_clash_count)warn.push(`<b>${d.number_clash_count}</b> رقمًا مستخدمًا لطالب آخر — سيُولَّد بديل:<br>`
+    +d.number_clashes.slice(0,4).map(c=>`${esc(c.name)} (${esc(c.number)})`).join('<br>'));
+  if(d.has_number_column)warn.push(`${d.from_file_numbers} رقمًا من الملف · الباقي يُولَّد`);
   el('prev').innerHTML=`
     <div class="prev">
       <div class="ph">
@@ -211,7 +216,8 @@ function showPreview(d,fname){
         <button class="btn sm" onclick="confirmUp()">تسجيل ${d.found} طالبًا</button>
       </div>
       <div class="pb"><table><tbody>${d.preview.map(p=>
-        `<tr><td style="width:40px" class="muted">${p.seat_no??''}</td><td>${esc(p.name)}</td></tr>`).join('')}
+        `<tr><td style="width:40px" class="muted">${p.seat_no??''}</td><td>${esc(p.name)}</td>
+             <td style="width:110px"><span class="code">${esc(p.number)}</span></td></tr>`).join('')}
         ${d.found>d.preview.length?`<tr><td></td><td class="muted">… و${d.found-d.preview.length} اسمًا آخر</td></tr>`:''}
       </tbody></table></div>
       ${warn.length?`<div class="warn">${warn.join('<br>')}</div>`:''}
@@ -241,14 +247,21 @@ async function addCount(){
   const count=parseInt(el('count').value||'0',10); if(!count){toast('اكتب عدد الطلبة',false);return;}
   const r=await jreq(`/api/sections/${sid}/students`,{count});
   const d=await r.json().catch(()=>({}));
-  if(r.ok){el('count').value='';await load();toast(`تم توليد ${d.added} رمزًا`);}
+  if(r.ok){el('count').value='';await load();toast(`تم توليد ${d.added} رقمًا`);}
   else toast(d.error||'تعذّر التوليد',false);
 }
-async function newCode(id){const r=await jreq(`/api/students/${id}`,{new_code:true},'PUT');if(r.ok){await load();toast('تم توليد رمز جديد');}}
+async function newCode(id){const r=await jreq(`/api/students/${id}`,{new_code:true},'PUT');if(r.ok){await load();toast('تم توليد رقم جديد');}}
 async function rename(id){
   const cur=(ROSTER.find(s=>s.id===id)||{}).name||'';
   const n=prompt('اسم الطالب',cur); if(n==null)return;
   const r=await jreq(`/api/students/${id}`,{name:n},'PUT'); if(r.ok){await load();toast('تم التعديل');}
+}
+async function setNum(id){
+  const cur=(ROSTER.find(s=>s.id===id)||{}).code||'';
+  const n=prompt('رقم الطالب (أرقام فقط) — هو رقم دخوله للمنصة',cur); if(n==null)return;
+  const r=await jreq(`/api/students/${id}`,{code:n},'PUT');
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){await load();toast('تم تغيير الرقم');}else toast(d.error||'تعذّر التغيير',false);
 }
 async function del(id){
   if(!confirm('حذف هذا الطالب؟ ستُحذف نتائجه في الاختبارات.'))return;

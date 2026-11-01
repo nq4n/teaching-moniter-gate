@@ -55,6 +55,23 @@ input:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3p
 .result .big{font-size:46px;font-weight:700;line-height:1.1}
 .result .band{font-size:15px;font-weight:600;color:#0C7266;margin-top:7px}
 .save{font-size:12px;color:#8A93A3}
+.tabs2{display:flex;background:#fff;border:1px solid #E6E8EE;border-radius:12px;overflow:hidden;margin-bottom:14px}
+.tabs2 button{flex:1;height:44px;border:none;background:#fff;font:inherit;font-size:14px;font-weight:600;color:#646D7E;cursor:pointer;border-inline-start:1px solid #E6E8EE}
+.tabs2 button:first-child{border-inline-start:none}
+.tabs2 button.on{background:#2D5BFF;color:#fff}
+.sum{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:16px}
+.sum .b{border:1px solid #E6E8EE;border-radius:12px;padding:13px 10px;text-align:center;background:#FBFCFE}
+.sum .v{font-size:21px;font-weight:700;line-height:1.2}
+.sum .k{font-size:11px;color:#6B7486;margin-top:3px}
+.rrow{display:flex;align-items:center;gap:11px;padding:13px 14px;border:1px solid #E6E8EE;border-radius:12px;margin-bottom:9px;flex-wrap:wrap}
+.rrow.none{opacity:.6;border-style:dashed}
+.rrow .i{flex:1;min-width:140px}
+.rrow .t{font-weight:600;font-size:14px}
+.rrow .u{font-size:11.5px;color:#8A93A3;margin-top:3px}
+.rrow .sc{font-weight:700;font-size:16px;white-space:nowrap}
+.bd{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.bd.a{background:#E2F5F2;color:#0C7266}.bd.b{background:#EEF2FF;color:#2D5BFF}
+.bd.c{background:#F3EEFF;color:#5B3FC4}.bd.d{background:#FFF6E6;color:#A8681B}
 </style>
 </head>
 <body>
@@ -69,17 +86,21 @@ input:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3p
   <!-- 1 — code login -->
   <div class="card" id="vLogin" style="display:none">
     <h2>اختباراتي</h2>
-    <p class="lead">أدخل <b>رمز الدخول</b> الذي أعطاك إياه معلّمك. لا تحتاج حسابًا ولا كلمة مرور.</p>
+    <p class="lead">أدخل <b>رقم الطالب</b> الخاص بك. لا تحتاج اسم مستخدم ولا كلمة مرور.</p>
     <div class="err" id="loginErr"></div>
-    <label for="code">رمز الطالب</label>
-    <input id="code" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="ABC123"
+    <label for="code">رقم الطالب</label>
+    <input id="code" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="000000"
            onkeydown="if(event.key==='Enter')login()">
     <button class="btn" style="margin-top:14px" onclick="login()">دخول</button>
   </div>
 
   <!-- 2 — exam list -->
   <div id="vList" style="display:none">
-    <div class="card">
+    <div class="tabs2" id="tabs">
+      <button id="tbE" class="on" onclick="tab('e')">اختباراتي</button>
+      <button id="tbR" onclick="tab('r')">نتائجي</button>
+    </div>
+    <div class="card" id="paneE">
       <h2>اختباراتي</h2>
       <p class="lead" id="listLead"></p>
       <div class="err" id="listErr"></div>
@@ -88,6 +109,16 @@ input:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3p
         لا توجد اختبارات متاحة لك الآن. عُد عند الوقت الذي حدّده معلّمك.
       </div>
       <button class="btn ghost" style="margin-top:6px" onclick="refresh()">تحديث</button>
+    </div>
+
+    <div class="card" id="paneR" style="display:none">
+      <h2>نتائجي</h2>
+      <p class="lead">كل ما صحّحه معلّمك حتى الآن — من الاختبارات الإلكترونية ومن الأوراق التي قيّمها بنفسه.</p>
+      <div id="summary"></div>
+      <div id="results"></div>
+      <div class="lead" id="resEmpty" style="display:none;text-align:center;padding:22px 0">
+        لم تُرصد لك درجات بعد.
+      </div>
     </div>
   </div>
 
@@ -127,14 +158,42 @@ function fmtDt(iso){if(!iso)return'';return new Date(iso).toLocaleString('ar',{w
 
 async function login(){
   const code=el('code').value.trim();
-  if(!code){err('loginErr','أدخل رمزك');return;}
+  if(!code){err('loginErr','أدخل رقمك');return;}
   err('loginErr','');
   const r=await jreq('/api/student/login',{code});
   const d=await r.json().catch(()=>({}));
-  if(!r.ok){err('loginErr',d.error||'رمز غير صحيح');return;}
+  if(!r.ok){err('loginErr',d.error||'رقم غير صحيح');return;}
   await refresh();
 }
 async function logout(){await jreq('/api/student/logout');location.reload();}
+
+function tab(v){
+  el('paneE').style.display=v==='e'?'block':'none';
+  el('paneR').style.display=v==='r'?'block':'none';
+  el('tbE').className=v==='e'?'on':'';el('tbR').className=v==='r'?'on':'';
+  if(v==='r')loadResults();
+}
+const BD={'متقدّم':'a','متمكّن':'b','قيد التطوّر':'c','مبتدئ':'d'};
+async function loadResults(){
+  const r=await fetch('/api/student/results');
+  if(!r.ok)return;
+  const d=await r.json();
+  el('summary').innerHTML=`<div class="sum">
+    <div class="b"><div class="v">${d.average!=null?d.average+'%':'—'}</div><div class="k">متوسطك</div></div>
+    <div class="b"><div class="v">${d.earned} <span style="font-size:13px;color:#8A93A3">/ ${d.out_of}</span></div><div class="k">مجموع درجاتك</div></div>
+    <div class="b"><div class="v">${d.marked}<span style="font-size:13px;color:#8A93A3"> / ${d.total_tools}</span></div><div class="k">أداة مرصودة</div></div>
+  </div>`+(d.band?`<div style="text-align:center;margin:-6px 0 16px"><span class="bd ${BD[d.band]}" style="font-size:13px;padding:5px 14px">${esc(d.band)}</span></div>`:'');
+  const marked=d.results.filter(x=>x.score!=null);
+  el('resEmpty').style.display=marked.length?'none':'block';
+  el('results').innerHTML=d.results.map(x=>x.score==null
+    ? `<div class="rrow none"><div class="i"><div class="t">${esc(x.tool)}</div>
+         <div class="u">${esc(x.kind||'')} · من ${x.max_score} درجة</div></div>
+         <span class="muted" style="font-size:12.5px">لم تُرصد بعد</span></div>`
+    : `<div class="rrow"><div class="i"><div class="t">${esc(x.tool)}</div>
+         <div class="u">${esc(x.kind||'')}${x.lesson?' · '+esc(x.lesson):''}${x.date?' · '+x.date:''}</div></div>
+         <span class="sc">${x.score} <span style="font-size:12.5px;color:#8A93A3">/ ${x.max_score}</span></span>
+         <span class="bd ${BD[x.band]||'d'}">${esc(x.band)} · ${x.percentage}%</span></div>`).join('');
+}
 
 async function refresh(){
   stopClock();
@@ -142,7 +201,7 @@ async function refresh(){
   if(r.status===401){el('who').style.display='none';el('out').style.display='none';show('vLogin');el('code').focus();return;}
   const d=await r.json();
   el('who').style.display='block';el('out').style.display='inline-flex';
-  el('who').innerHTML=`<b>${esc(d.student.name)}</b>${esc(d.student.grade)} · ${esc(d.student.section)}`;
+  el('who').innerHTML=`<b>${esc(d.student.name)}</b>${esc(d.student.grade)} · ${esc(d.student.section)} · <span class="ltr">${esc(d.student.code)}</span>`;
   el('listLead').innerHTML=`الاختبارات التي شغّلها معلّمك لشعبتك. الاختبار يُفتح في وقته المحدّد ويُغلق تلقائيًا.`;
   const ex=d.exams||[];
   el('listEmpty').style.display=ex.length?'none':'block';
@@ -166,6 +225,7 @@ async function refresh(){
       </div>${pill}${action}</div>`;
   }).join('');
   show('vList');
+  if(el('tbR').className==='on')loadResults();
 }
 
 async function start(rid){

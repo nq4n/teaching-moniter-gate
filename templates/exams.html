@@ -24,6 +24,14 @@
 .modal.on{display:flex}
 .sheet{background:#fff;border-radius:16px;max-width:760px;width:100%;padding:24px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cards2{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:7px;max-height:240px;overflow:auto;padding:3px}
+.pk{display:flex;align-items:center;gap:9px;border:1px solid #E6E8EE;border-radius:10px;padding:8px 11px;cursor:pointer;font-size:13px;background:#fff}
+.pk:hover{background:#FBFCFE}
+.pk.on{border-color:#2D5BFF;background:#F5F8FF;font-weight:600}
+.pk input{width:auto;height:auto;margin:0;flex:0 0 auto}
+.pk .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk .c{font-size:11px;color:#8A93A3;direction:ltr}
+.pk.done{opacity:.5}
 @media(max-width:620px){.grid2{grid-template-columns:1fr}}
 </style>
 </head>
@@ -134,6 +142,18 @@
               <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500"><input type="checkbox" id="r-shuffle" checked style="width:auto;height:auto"> ترتيب الأسئلة عشوائيًا</label>
               <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500"><input type="checkbox" id="r-show" checked style="width:auto;height:auto"> إظهار الدرجة للطالب</label>
               <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500" id="absBox"><input type="checkbox" id="r-abs" style="width:auto;height:auto"> للغائبين فقط</label>
+              <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500"><input type="checkbox" id="r-pick" onchange="togglePick()" style="width:auto;height:auto"> لطلبة محدّدين فقط</label>
+            </div>
+            <div id="pickBox" style="display:none;margin-top:14px">
+              <div class="hd" style="margin-bottom:8px">
+                <label style="margin:0">اختر من يُفتح له الاختبار</label>
+                <div class="spacer"></div>
+                <button class="btn ghost xs" onclick="pickAll(true)">تحديد الكل</button>
+                <button class="btn ghost xs" onclick="pickAll(false)">إلغاء التحديد</button>
+                <button class="btn ghost xs" onclick="pickAbsent()">الغائبون عن هذا الاختبار</button>
+                <span class="pill" id="pickCount">0</span>
+              </div>
+              <div id="pickList" class="cards2"></div>
             </div>
             <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
               <button class="btn go" onclick="createRun(true)">تشغيل الآن</button>
@@ -188,6 +208,7 @@ function onGrade(){
   const g=curGrade();
   el('tool').innerHTML=(g&&g.tools||[]).map(t=>`<option value="${t.id}">${esc(t.name)}${t.max_score?` — ${t.max_score} درجة`:''}</option>`).join('')||'<option value="">— لا أدوات —</option>';
   el('r-section').innerHTML=(g&&g.sections||[]).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')||'<option value="">— لا شُعب —</option>';
+  el('r-section').onchange=()=>{if(el('r-pick').checked)loadPick();};
   loadTool();
 }
 
@@ -329,11 +350,53 @@ async function createRun(now){
   const body={section_id:sec,start_at:start,end_at:toUtc(el('r-end').value),
     duration_min:el('r-dur').value||null,absentees_only:el('r-abs').checked,
     shuffle:el('r-shuffle').checked,show_score:el('r-show').checked};
+  if(el('r-pick').checked){
+    const chosen=PICK.filter(s=>s.on).map(s=>s.id);
+    if(!chosen.length){toast('حدّد الطلبة الذين يُفتح لهم الاختبار',false);return;}
+    body.allowed_students=chosen;
+  }
   const r=await jreq(`/api/tools/${tid}/runs`,body);
   const d=await r.json().catch(()=>({}));
   if(r.ok){toast(now?'شُغّل الاختبار':'تمت الجدولة');await loadRuns();loadRun(d.id);}
   else toast(d.error||'تعذّر التشغيل',false);
 }
+/* ── who may sit this run ── */
+let PICK=[];
+async function loadPick(){
+  const sid=el('r-section').value; if(!sid){PICK=[];drawPick();return;}
+  const tid=curTid();
+  const d=await fetch(`/api/sections/${sid}/students`).then(r=>r.json()).catch(()=>({students:[]}));
+  let done=new Set();
+  if(tid){
+    const runs=await fetch('/api/runs').then(r=>r.json()).catch(()=>({runs:[]}));
+    for(const r of (runs.runs||[])){
+      if(String(r.tool_id)!==String(tid)||String(r.section_id)!==String(sid))continue;
+      const full=await fetch(`/api/runs/${r.id}`).then(x=>x.json()).catch(()=>({}));
+      (full.roster||[]).forEach(x=>{if(x.status==='submitted')done.add(x.student_id);});
+    }
+  }
+  PICK=(d.students||[]).filter(s=>s.active).map(s=>({...s,done:done.has(s.id),on:false}));
+  drawPick();
+}
+function drawPick(){
+  el('pickList').innerHTML=PICK.map((s,i)=>`
+    <label class="pk ${s.on?'on':''} ${s.done?'done':''}" onclick="togglePk(${i},event)">
+      <input type="checkbox" ${s.on?'checked':''} onclick="event.stopPropagation();togglePk(${i},event)">
+      <span class="n" title="${esc(s.name)}">${esc(s.name)}</span>
+      <span class="c">${esc(s.code)}</span>
+    </label>`).join('')||'<span class="muted">لا طلبة مسجّلون في هذه الشعبة</span>';
+  el('pickCount').textContent=`${PICK.filter(s=>s.on).length} محدّد`;
+}
+function togglePk(i,e){if(e)e.preventDefault();PICK[i].on=!PICK[i].on;drawPick();}
+function pickAll(on){PICK.forEach(s=>s.on=on);drawPick();}
+function pickAbsent(){PICK.forEach(s=>s.on=!s.done);drawPick();
+  toast(`حُدّد ${PICK.filter(s=>s.on).length} طالبًا لم يسلّم هذا الاختبار`);}
+function togglePick(){
+  const on=el('r-pick').checked;
+  el('pickBox').style.display=on?'block':'none';
+  if(on)loadPick();
+}
+
 const PHASE={open:['open','مفتوح الآن'],scheduled:['scheduled','مجدول'],ended:['ended','انتهى الوقت'],closed:['closed','مُغلق']};
 async function loadRuns(){
   const tid=curTid(); if(!tid)return;
@@ -346,7 +409,7 @@ async function loadRuns(){
     const [cls,lbl]=PHASE[r.phase]||['','—'];
     return `<div class="row">
       <div class="info">
-        <div class="t">${esc(r.label||('تشغيل '+r.round_no))} — ${esc(r.section_name)}${r.absentees_only?' <span class="pill warn">للغائبين</span>':''}</div>
+        <div class="t">${esc(r.label||('تشغيل '+r.round_no))} — ${esc(r.section_name)}${r.absentees_only?' <span class="pill warn">للغائبين</span>':''}${r.restricted?` <span class="pill warn">${r.eligible} طالبًا محدّدًا</span>`:''}</div>
         <div class="u">${fmt(r.start_at)} ← ${fmt(r.end_at)}${r.duration_min?` · ${r.duration_min} دقيقة للطالب`:''}</div>
       </div>
       <span class="pill ${cls}">${lbl}</span>

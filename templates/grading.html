@@ -63,6 +63,20 @@
           <a class="btn" style="display:inline-flex" href="{{ url_for('students_page') }}">تسجيل الطلبة</a>
         </div>
 
+        <div class="card" id="upCard" style="display:none">
+          <div class="hd"><h3>رفع الدرجات من ملف</h3><div class="spacer"></div>
+            <a class="btn ghost sm" id="scTpl" href="#">تحميل كشف الدرجات</a></div>
+          <p class="lead">القالب ينزل مُعبّأً بأسماء الشعبة وأرقامها — اكتب الدرجات وارفعه.
+            تُطابَق كل درجة بصاحبها عبر <b>رقم الطالب</b> (أو الاسم إن لم يوجد رقم)، وتُعرض لك المطابقة قبل الحفظ.</p>
+          <div class="drop" id="scDrop" onclick="document.getElementById('scFile').click()">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5-5 5 5M12 5v13"/></svg></div>
+            <div class="t">اسحب كشف الدرجات هنا أو اضغط للاختيار</div>
+            <div class="s">Excel ‏(.xlsx) أو CSV — عمود رقم الطالب وعمود الدرجة</div>
+          </div>
+          <input type="file" id="scFile" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="scPick(this.files[0])">
+          <div id="scPrev"></div>
+        </div>
+
         <div class="card" id="main" style="display:none">
           <div class="hd">
             <h3 id="title">—</h3><div class="spacer"></div>
@@ -119,6 +133,8 @@ async function load(){
   const has=d.students.length;
   el('noStudents').style.display=has?'none':'block';
   el('main').style.display=has?'block':'none';
+  el('upCard').style.display=has?'block':'none';
+  el('scTpl').href=`/api/sections/${sid}/tools/${tid}/scores-template.xlsx`;
   if(!has)return;
 
   el('title').textContent=`${d.tool.name} — ${d.section.name}`;
@@ -201,6 +217,74 @@ function applyAll(){
   if(!rows.length){toast('حدّد الطلبة أولًا',false);return;}
   rows.forEach(tr=>{const i=tr.querySelector('.sc');i.value=v;onEdit(i);});
   toast(`طُبّقت ${v} على ${rows.length} طالبًا — اضغط «حفظ الدرجات»`);
+}
+
+/* ── marks upload ── */
+let SCFILE=null;
+const scDrop=el('scDrop');
+['dragenter','dragover'].forEach(e=>scDrop.addEventListener(e,ev=>{ev.preventDefault();scDrop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>scDrop.addEventListener(e,ev=>{ev.preventDefault();scDrop.classList.remove('over');}));
+scDrop.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)scPick(f);});
+
+async function scPick(f){
+  if(!f)return;
+  if(!/\.(xlsx|xlsm|csv)$/i.test(f.name)){toast('الملف يجب أن يكون Excel أو CSV',false);return;}
+  SCFILE=f;scDrop.classList.add('busy');
+  const d=await scSend(0);
+  scDrop.classList.remove('busy');
+  if(d)scShow(d,f.name);
+}
+async function scSend(commit){
+  const fd=new FormData();
+  fd.append('file',SCFILE);fd.append('commit',String(commit));
+  if(el('applied').value)fd.append('applied_date',el('applied').value);
+  const r=await fetch(`/api/sections/${el('section').value}/tools/${el('tool').value}/scores/import`,
+    {method:'POST',body:fd});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast(d.error||'تعذّرت قراءة الملف',false);el('scPrev').innerHTML='';return null;}
+  return d;
+}
+function scCancel(){SCFILE=null;el('scFile').value='';el('scPrev').innerHTML='';}
+function scShow(d,fname){
+  if(!d.matched){
+    el('scPrev').innerHTML=`<div class="prev">
+      <div class="ph"><span class="pill warn">لا مطابقات</span><div class="spacer"></div>
+        <button class="btn ghost sm" onclick="scCancel()">إغلاق</button></div>
+      <div class="warn">لم تُطابَق أي درجة بطالب في <b>${esc(fname)}</b>.
+        تأكد أن الملف يحوي عمود «رقم الطالب» — أو حمّل كشف الدرجات الجاهز.</div></div>`;
+    return;
+  }
+  const warn=[];
+  if(d.unmatched_count)warn.push(`<b>${d.unmatched_count}</b> صفًا لم يُطابَق أي طالب:<br>`
+    +d.unmatched.slice(0,5).map(u=>`صف ${u.row}: ${esc(u.number||u.name||'—')}`).join('<br>'));
+  if(d.out_of_range_count)warn.push(`<b>${d.out_of_range_count}</b> درجة خارج النطاق (0–${d.tool.max_score}) لن تُحفظ:<br>`
+    +d.out_of_range.slice(0,5).map(u=>`${esc(u.name)}: ${esc(String(u.value))}`).join('<br>'));
+  if(d.blank)warn.push(`<b>${d.blank}</b> خلية فارغة — تُركت كما هي (غير مُقيَّم)`);
+  el('scPrev').innerHTML=`
+    <div class="prev">
+      <div class="ph">
+        <span class="pill open">${d.matched} درجة مطابَقة</span>
+        <span class="muted">من ${d.roster} في الكشف · المطابقة بـ «${esc(d.matched_by)}»${d.sheet?` · ورقة «${esc(d.sheet)}»`:''}</span>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="scCancel()">إلغاء</button>
+        <button class="btn sm" onclick="scSave()">حفظ ${d.matched} درجة</button>
+      </div>
+      <div class="pb"><table><tbody>${d.preview.map(p=>
+        `<tr><td style="width:96px"><span class="code">${esc(p.number)}</span></td>
+             <td>${esc(p.name)}</td>
+             <td style="width:90px;font-weight:600">${p.score} / ${d.tool.max_score}</td></tr>`).join('')}
+        ${d.matched>d.preview.length?`<tr><td></td><td class="muted">… و${d.matched-d.preview.length} درجة أخرى</td></tr>`:''}
+      </tbody></table></div>
+      ${warn.length?`<div class="warn">${warn.join('<br>')}</div>`:''}
+    </div>`;
+}
+async function scSave(){
+  scDrop.classList.add('busy');
+  const d=await scSend(1);
+  scDrop.classList.remove('busy');
+  if(!d)return;
+  scCancel();await load();
+  toast(`حُفظت ${d.saved} درجة`);
 }
 
 async function save(){

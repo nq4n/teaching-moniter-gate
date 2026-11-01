@@ -205,7 +205,8 @@ class Student(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     section_id = db.Column(db.Integer, db.ForeignKey("section.id"), nullable=False, index=True)
     name = db.Column(db.String(120), nullable=False)
-    code = db.Column(db.String(12), unique=True, nullable=False, index=True)
+    code = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    """رقم الطالب — the number the student signs in with (school-issued or generated)."""
     seat_no = db.Column(db.Integer)           # رقم الطالب في الكشف
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -252,10 +253,21 @@ class ExamRun(db.Model):
     end_at = db.Column(db.DateTime)          # UTC — exam closes itself at this moment
     duration_min = db.Column(db.Integer)     # per-student time limit (minutes), optional
     absentees_only = db.Column(db.Boolean, default=False)
+    allowed_json = db.Column(db.Text)   # JSON list[int] — an explicit allow-list of student ids
     shuffle = db.Column(db.Boolean, default=True)
     show_score = db.Column(db.Boolean, default=True)
     state = db.Column(db.String(12), default="scheduled")  # scheduled / closed  (open is derived from the clock)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def allowed_ids(self):
+        if not self.allowed_json:
+            return None                 # None = the whole section (or all absentees)
+        try:
+            v = json.loads(self.allowed_json)
+            return [int(x) for x in v] if isinstance(v, list) else None
+        except (ValueError, TypeError):
+            return None
 
     tool = db.relationship("Tool", backref=db.backref("runs", cascade="all, delete-orphan"))
     section = db.relationship("Section", backref=db.backref("runs", cascade="all, delete-orphan"))
@@ -1615,18 +1627,46 @@ def analytics():
 # so every existing dashboard / analytics view picks exam results up unchanged.
 # ─────────────────────────────────────────────────────────────
 
-CODE_ALPHABET = "ACDEFGHJKLMNPQRTUVWXY34679"   # no 0/O, 1/I/L-lookalikes, 2/Z, 5/S, 8/B
 EXAM_KINDS = {"اختبار قصير", "اختبار عملي", "الامتحان النهائي", "سؤال قصير"}
 STUDENT_SESSION_KEY = "student_id"
 
+# A student signs in with a number and nothing else — no username, no password.
+# The number is either the school's own student number (uploaded with the roster)
+# or one the platform generates. Either way it is unique across the platform, so
+# one number always resolves to exactly one student.
+ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+
+
+def normalize_number(v):
+    """Digits only, Arabic-Indic numerals folded to ASCII. '' if there are none."""
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.endswith(".0") and s[:-2].isdigit():   # Excel hands integers back as floats
+        s = s[:-2]
+    s = s.translate(ARABIC_DIGITS)
+    return re.sub(r"\D", "", s)
+
+
+def number_taken(number, exclude_id=None):
+    q = Student.query.filter_by(code=number)
+    if exclude_id:
+        q = q.filter(Student.id != exclude_id)
+    return q.first() is not None
+
 
 def gen_student_code(length=6):
-    """A short, unambiguous, globally-unique login code."""
-    for _ in range(80):
-        code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(length))
-        if not Student.query.filter_by(code=code).first():
-            return code
-    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(length + 3))
+    """A random, unique student number. Random — not sequential — so one student
+    cannot reach another's page by trying the number next to their own."""
+    lo, hi = 10 ** (length - 1), 10 ** length - 1
+    for _ in range(200):
+        n = str(secrets.randbelow(hi - lo + 1) + lo)
+        if not number_taken(n):
+            return n
+    while True:
+        n = str(secrets.randbelow(10 ** (length + 3)) + 10 ** (length + 2))
+        if not number_taken(n):
+            return n
 
 
 def utcnow():
@@ -1679,8 +1719,13 @@ def run_eligible_students(run):
     Round 1 → every active student in the section.
     A make-up run with absentees_only → only those who never submitted an
     earlier round of the SAME tool + section, so present students can't retake.
+    An explicit allow-list narrows either case to exactly those students.
     """
     students = [s for s in run.section.students if s.active]
+    allowed = run.allowed_ids
+    if allowed is not None:
+        keep = set(allowed)
+        students = [s for s in students if s.id in keep]
     if not run.absentees_only:
         return students
     done = {
@@ -1734,6 +1779,8 @@ def _run_json(run, now=None):
         "end_at": iso_dt(run.end_at),
         "duration_min": run.duration_min,
         "absentees_only": bool(run.absentees_only),
+        "allowed_students": run.allowed_ids,
+        "restricted": run.allowed_ids is not None,
         "shuffle": bool(run.shuffle),
         "show_score": bool(run.show_score),
         "state": run.state,
@@ -1821,6 +1868,15 @@ def student_detail(stid):
         st.active = bool(data["active"])
     if data.get("new_code"):
         st.code = gen_student_code()
+    elif "code" in data:
+        n = normalize_number(data["code"])
+        if not n:
+            return jsonify({"error": "رقم الطالب يجب أن يكون أرقامًا"}), 400
+        if len(n) > 20:
+            return jsonify({"error": "رقم الطالب طويل جدًا"}), 400
+        if number_taken(n, exclude_id=st.id):
+            return jsonify({"error": f"الرقم {n} مستخدم لطالب آخر"}), 409
+        st.code = n
     db.session.commit()
     return jsonify(_student_json(st))
 
@@ -1965,21 +2021,34 @@ def create_run(tid):
     round_no = max([r.round_no or 1 for r in prev] or [0]) + 1
     absentees_only = bool(data.get("absentees_only")) if round_no > 1 else False
 
+    # Optional: open this run to named students only.
+    allowed = data.get("allowed_students")
+    allowed_json = None
+    if isinstance(allowed, list) and allowed:
+        valid = {x.id for x in sec.students}
+        ids = sorted({int(i) for i in allowed if int(i) in valid})
+        if not ids:
+            return jsonify({"error": "لا يوجد طلبة صالحون في القائمة المحدّدة"}), 400
+        allowed_json = json.dumps(ids)
+
     # A make-up round is pointless if nobody is missing.
     run = ExamRun(
         tool_id=tid, section_id=sec.id, round_no=round_no,
         label=(data.get("label") or ("تشغيل للغائبين" if absentees_only else f"تشغيل {round_no}")),
         start_at=start_at, end_at=end_at, duration_min=duration,
         absentees_only=absentees_only,
+        allowed_json=allowed_json,
         shuffle=bool(data.get("shuffle", True)),
         show_score=bool(data.get("show_score", True)),
         state="scheduled",
     )
     db.session.add(run)
     db.session.flush()
-    if absentees_only and not run_eligible_students(run):
+    if not run_eligible_students(run):
         db.session.rollback()
-        return jsonify({"error": "لا يوجد طلبة غائبون — جميع الطلبة سلّموا الاختبار"}), 400
+        if absentees_only:
+            return jsonify({"error": "لا يوجد طلبة غائبون — جميع الطلبة سلّموا الاختبار"}), 400
+        return jsonify({"error": "لا يوجد طلبة مؤهّلون لهذا التشغيل"}), 400
     db.session.commit()
     return jsonify(_run_json(run)), 201
 
@@ -2031,6 +2100,16 @@ def run_detail(rid):
             for f in ("shuffle", "show_score"):
                 if f in data:
                     setattr(run, f, bool(data[f]))
+            if "allowed_students" in data:
+                a = data["allowed_students"]
+                if not a:
+                    run.allowed_json = None      # back to the whole section
+                else:
+                    valid = {x.id for x in run.section.students}
+                    ids = sorted({int(i) for i in a if int(i) in valid})
+                    if not ids:
+                        return jsonify({"error": "لا يوجد طلبة صالحون في القائمة"}), 400
+                    run.allowed_json = json.dumps(ids)
             if run.end_at and run.start_at and run.end_at <= run.start_at:
                 return jsonify({"error": "وقت الإغلاق يجب أن يكون بعد وقت البدء"}), 400
         db.session.commit()
@@ -2320,7 +2399,13 @@ NAME_HEADERS = {
     "الطالبة", "اسم الطالبة", "الاسم الكامل", "name", "student", "student name",
     "full name",
 }
-SEAT_HEADERS = {"م", "رقم", "الرقم", "ت", "no", "no.", "#", "seq", "رقم الطالب", "التسلسل"}
+SEAT_HEADERS = {"م", "ت", "no", "no.", "#", "seq", "التسلسل", "مسلسل", "رقم الكشف"}
+# The school's own student number — this becomes the number the student signs in with.
+NUMBER_HEADERS = {
+    "رقم الطالب", "الرقم", "رقم", "الرقم المدني", "رقم الهوية", "الرقم الأكاديمي",
+    "رقم الجلوس", "رقم القيد", "رقم الطالبة", "id", "student id", "student no",
+    "student number", "number", "code", "الرمز", "رمز الدخول",
+}
 SERIAL_RE = re.compile(r"^\s*\d+\s*[-.،)\]\t]\s*")
 
 
@@ -2367,17 +2452,19 @@ def _looks_like_name(v):
 
 
 def _find_roster_columns(rows):
-    """Locate the name column (and a seat column if present).
+    """Locate the name column, plus the student-number and seat columns if present.
 
-    Prefers an explicit header; falls back to whichever column holds the most
+    Prefers explicit headers; falls back to whichever column holds the most
     name-ish cells, so a bare one-column list of names works too.
+    Returns (name_col, seat_col, number_col, first_data_row).
     """
     for i, row in enumerate(rows[:12]):
         cells = [_norm(_cell(c)) for c in row]
         for j, c in enumerate(cells):
             if c in NAME_HEADERS:
                 seat = next((k for k, x in enumerate(cells) if x in SEAT_HEADERS), None)
-                return j, seat, i + 1
+                num = next((k for k, x in enumerate(cells) if x in NUMBER_HEADERS), None)
+                return j, seat, num, i + 1
     best, best_n = None, 0
     width = max((len(r) for r in rows), default=0)
     for j in range(width):
@@ -2385,8 +2472,8 @@ def _find_roster_columns(rows):
         if n > best_n:
             best, best_n = j, n
     if best is None or best_n == 0:
-        return None, None, 0
-    return best, None, 0
+        return None, None, None, 0
+    return best, None, None, 0
 
 
 def _clean_name(v):
@@ -2418,12 +2505,13 @@ def import_students(sid):
     if not rows:
         return jsonify({"error": "الملف فارغ"}), 400
 
-    name_col, seat_col, start = _find_roster_columns(rows)
+    name_col, seat_col, number_col, start = _find_roster_columns(rows)
     if name_col is None:
         return jsonify({"error": "لم أجد عمود الأسماء — سمِّ العمود «الاسم» أو استخدم القالب الجاهز"}), 400
 
     existing = {_norm(x.name) for x in s.students}
-    names, duplicates, ignored, seen = [], [], 0, set()
+    rows_out, duplicates, ignored, seen = [], [], 0, set()
+    clashes, seen_numbers = [], set()
     for r in rows[start:]:
         raw = _cell(r[name_col]) if name_col < len(r) else ""
         name = _clean_name(raw)
@@ -2443,28 +2531,45 @@ def import_students(sid):
                 seat = int(float(_cell(r[seat_col])))
             except (TypeError, ValueError):
                 seat = None
-        names.append((name[:120], seat))
+        # The school's own student number, when the sheet carries one.
+        number = ""
+        if number_col is not None and number_col < len(r):
+            number = normalize_number(r[number_col])[:20]
+        if number and (number in seen_numbers or number_taken(number)):
+            clashes.append({"name": name, "number": number})
+            number = ""          # fall back to a generated one
+        if number:
+            seen_numbers.add(number)
+        rows_out.append({"name": name[:120], "seat_no": seat, "number": number})
 
     limit = 300
-    over = max(0, len(names) - limit)
-    names = names[:limit]
+    over = max(0, len(rows_out) - limit)
+    rows_out = rows_out[:limit]
 
     result = {
         "check": not commit,
         "sheet": sheet_used,
         "sheets": sheets,
-        "found": len(names),
+        "found": len(rows_out),
         "duplicates": len(duplicates),
         "duplicate_names": duplicates[:20],
         "ignored": ignored,
         "over_limit": over,
-        "preview": [{"name": n, "seat_no": st} for n, st in names[:15]],
+        "preview": [
+            {"name": x["name"], "seat_no": x["seat_no"],
+             "number": x["number"] or "— يُولَّد —"}
+            for x in rows_out[:15]
+        ],
         "column": name_col + 1,
         "has_seat_column": seat_col is not None,
+        "has_number_column": number_col is not None,
+        "from_file_numbers": sum(1 for x in rows_out if x["number"]),
+        "number_clashes": clashes[:20],
+        "number_clash_count": len(clashes),
     }
     if not commit:
         return jsonify(result), 200
-    if not names:
+    if not rows_out:
         if duplicates:
             # Re-uploading the same roster is not a failure — say so plainly.
             result["added"] = 0
@@ -2475,13 +2580,15 @@ def import_students(sid):
 
     nxt = max([x.seat_no or 0 for x in s.students] or [0])
     created = []
-    for name, seat in names:
+    for x in rows_out:
+        seat = x["seat_no"]
         if seat is None:
             nxt += 1
             seat = nxt
         else:
             nxt = max(nxt, seat)
-        st = Student(section_id=sid, name=name, code=gen_student_code(), seat_no=seat)
+        st = Student(section_id=sid, name=x["name"],
+                     code=x["number"] or gen_student_code(), seat_no=seat)
         db.session.add(st)
         created.append(st)
     db.session.flush()
@@ -2508,11 +2615,15 @@ def students_template(sid):
     ws.sheet_view.rightToLeft = True
     hdr = Font(bold=True, color="FFFFFF")
     fill = PatternFill("solid", fgColor="2D5BFF")
-    for j, (title, width) in enumerate([("م", 7), ("الاسم", 34)], start=1):
+    from openpyxl.comments import Comment
+    for j, (title, width) in enumerate([("م", 7), ("الاسم", 34), ("رقم الطالب", 18)], start=1):
         c = ws.cell(row=1, column=j, value=title)
         c.font, c.fill = hdr, fill
         c.alignment = Alignment(horizontal="center")
         ws.column_dimensions[c.column_letter].width = width
+    ws.cell(row=1, column=3).comment = Comment(
+        "رقم الطالب في نظام المدرسة — هو نفسه الرقم الذي يدخل به المنصة.\n"
+        "اتركه فارغًا ليولّد النظام رقمًا للطالب.", "المنارة")
     for i in range(2, 32):
         ws.cell(row=i, column=1, value=i - 1).alignment = Alignment(horizontal="center")
     ws.freeze_panes = "A2"
@@ -2535,7 +2646,7 @@ def students_export(sid):
     ws.sheet_view.rightToLeft = True
     hdr = Font(bold=True, color="FFFFFF")
     fill = PatternFill("solid", fgColor="2D5BFF")
-    for j, (title, width) in enumerate([("م", 7), ("الاسم", 34), ("رمز الدخول", 18)], start=1):
+    for j, (title, width) in enumerate([("م", 7), ("الاسم", 34), ("رقم الطالب", 18)], start=1):
         c = ws.cell(row=1, column=j, value=title)
         c.font, c.fill = hdr, fill
         c.alignment = Alignment(horizontal="center")
@@ -2547,7 +2658,7 @@ def students_export(sid):
         c.font = Font(bold=True, name="Consolas")
         c.alignment = Alignment(horizontal="center")
     ws.freeze_panes = "A2"
-    return _xlsx_response(wb, f"codes_{s.grade.name}_{s.name}.xlsx")
+    return _xlsx_response(wb, f"numbers_{s.grade.name}_{s.name}.xlsx")
 
 
 def _xlsx_response(wb, filename):
@@ -2558,6 +2669,209 @@ def _xlsx_response(wb, filename):
         bio, as_attachment=True, download_name=filename.replace(" ", "_"),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+# ── Fast upload of marks, matched to each student ──
+# The sheet carries a student number (or a name) and a score. Each score lands
+# on that student's row, so the result is the same as marking them one by one —
+# never an anonymous block of numbers.
+
+SCORE_HEADERS = {
+    "الدرجة", "الدرجات", "درجة", "العلامة", "النتيجة", "score", "mark", "marks",
+    "grade", "result", "points",
+}
+
+
+def _find_score_columns(rows, tool_name=None):
+    """Find (number_col, name_col, score_col, first_data_row) in a marks sheet.
+
+    The score column is matched by header; failing that, a column named after
+    the tool is used, and failing that the last mostly-numeric column that is
+    not the student-number column.
+    """
+    want = _norm(tool_name) if tool_name else None
+    for i, row in enumerate(rows[:12]):
+        cells = [_norm(_cell(c)) for c in row]
+        num = next((k for k, x in enumerate(cells) if x in NUMBER_HEADERS), None)
+        name = next((k for k, x in enumerate(cells) if x in NAME_HEADERS), None)
+        score = next((k for k, x in enumerate(cells) if x in SCORE_HEADERS), None)
+        if score is None and want:
+            score = next((k for k, x in enumerate(cells) if x and x == want), None)
+        if score is None and want:
+            score = next((k for k, x in enumerate(cells) if x and want in x), None)
+        if (num is not None or name is not None) and score is not None:
+            return num, name, score, i + 1
+        if num is not None or name is not None:
+            # Identity column found but no labelled score column — take the last
+            # column that actually holds numbers.
+            body = rows[i + 1:]
+            width = max((len(r) for r in body), default=0)
+            best = None
+            for k in range(width):
+                if k in (num, name):
+                    continue
+                vals = [_cell(r[k]) for r in body if k < len(r) and _cell(r[k])]
+                if vals and sum(1 for v in vals if _as_float(v) is not None) >= len(vals) * 0.7:
+                    best = k
+            if best is not None:
+                return num, name, best, i + 1
+    return None, None, None, 0
+
+
+def _as_float(v):
+    try:
+        return float(str(v).strip().translate(ARABIC_DIGITS))
+    except (TypeError, ValueError):
+        return None
+
+
+@app.route("/api/sections/<int:sid>/tools/<int:tid>/scores/import", methods=["POST"])
+@login_required
+def import_roster_scores(sid, tid):
+    """Upload a column of marks and attach each one to its student.
+
+    multipart/form-data: file=<xlsx|csv>, commit=0|1, sheet=<name>,
+    applied_date=YYYY-MM-DD.
+    """
+    s = Section.query.get_or_404(sid)
+    t = Tool.query.get_or_404(tid)
+    if not _owns_section(s) or not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+    if t.grade_id != s.grade_id:
+        return jsonify({"error": "الأداة لا تخص صف هذه الشعبة"}), 400
+    if not s.students:
+        return jsonify({"error": "سجّل طلبة الشعبة أولًا"}), 400
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "لم يُرفع ملف"}), 400
+    commit = str(request.form.get("commit", "0")).lower() in ("1", "true", "yes")
+
+    try:
+        rows, sheet_used, sheets = _read_table(f, request.form.get("sheet"))
+    except Exception:
+        return jsonify({"error": "تعذّر قراءة الملف — تأكد أنه Excel (.xlsx) أو CSV"}), 400
+    if not rows:
+        return jsonify({"error": "الملف فارغ"}), 400
+
+    num_col, name_col, score_col, start = _find_score_columns(rows, t.name)
+    if score_col is None:
+        return jsonify({"error": "لم أجد عمود الدرجات — سمِّ العمود «الدرجة» واستخدم القالب الجاهز"}), 400
+
+    by_number = {x.code: x for x in s.students}
+    by_name = {}
+    for x in s.students:
+        by_name.setdefault(_norm(x.name), []).append(x)
+
+    max_score = float(t.max_score or 100)
+    matched, unmatched, out_of_range, blank = {}, [], [], 0
+    for n, r in enumerate(rows[start:], start=start + 1):
+        ident_num = normalize_number(r[num_col]) if num_col is not None and num_col < len(r) else ""
+        ident_name = _clean_name(r[name_col]) if name_col is not None and name_col < len(r) else ""
+        if not ident_num and not ident_name:
+            continue
+        raw = _cell(r[score_col]) if score_col < len(r) else ""
+        st = by_number.get(ident_num) if ident_num else None
+        if st is None and ident_name:
+            hits = by_name.get(_norm(ident_name)) or []
+            st = hits[0] if len(hits) == 1 else None
+        if st is None:
+            unmatched.append({"row": n, "number": ident_num,
+                              "name": ident_name, "score": raw})
+            continue
+        if raw == "":
+            blank += 1
+            continue
+        v = _as_float(raw)
+        if v is None or v < 0 or v > max_score:
+            out_of_range.append({"row": n, "name": st.name, "value": raw})
+            continue
+        matched[st.id] = v
+
+    result = {
+        "check": not commit,
+        "sheet": sheet_used,
+        "sheets": sheets,
+        "tool": {"id": t.id, "name": t.name, "max_score": max_score},
+        "matched": len(matched),
+        "roster": len(s.students),
+        "blank": blank,
+        "unmatched": unmatched[:20],
+        "unmatched_count": len(unmatched),
+        "out_of_range": out_of_range[:20],
+        "out_of_range_count": len(out_of_range),
+        "matched_by": ("رقم الطالب" if num_col is not None else "الاسم"),
+        "preview": [
+            {"name": next(x.name for x in s.students if x.id == k),
+             "number": next(x.code for x in s.students if x.id == k), "score": v}
+            for k, v in list(matched.items())[:15]
+        ],
+    }
+    if not commit:
+        return jsonify(result), 200
+    if not matched:
+        return jsonify({"error": "لم تُطابَق أي درجة بطالب — تأكد من عمود رقم الطالب"}), 400
+
+    if request.form.get("applied_date"):
+        t.applied_date = parse_date(request.form.get("applied_date"))
+    saved = 0
+    for st_id, v in matched.items():
+        entry = ScoreEntry.query.filter_by(
+            section_id=sid, tool_id=tid, student_id=st_id).first()
+        if entry is None:
+            entry = ScoreEntry(section_id=sid, tool_id=tid, student_id=st_id)
+            db.session.add(entry)
+        entry.score = v
+        entry.max_score = max_score
+        entry.percentage = round((v / max_score) * 100, 2) if max_score else 0
+        entry.source = "teacher"
+        saved += 1
+    if not t.applied_date:
+        t.applied_date = date.today()
+    db.session.commit()
+    result["saved"] = saved
+    return jsonify(result), 201
+
+
+@app.route("/api/sections/<int:sid>/tools/<int:tid>/scores-template.xlsx")
+@login_required
+def roster_scores_template(sid, tid):
+    """The section's roster with an empty score column, ready to fill and upload."""
+    s = Section.query.get_or_404(sid)
+    t = Tool.query.get_or_404(tid)
+    if not _owns_section(s) or not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+    import openpyxl
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الدرجات"
+    ws.sheet_view.rightToLeft = True
+    hdr = Font(bold=True, color="FFFFFF")
+    fill = PatternFill("solid", fgColor="2D5BFF")
+    for j, (title, width) in enumerate(
+            [("م", 7), ("رقم الطالب", 16), ("الاسم", 32), ("الدرجة", 12)], start=1):
+        c = ws.cell(row=1, column=j, value=title)
+        c.font, c.fill = hdr, fill
+        c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[c.column_letter].width = width
+    ws.cell(row=1, column=4).comment = Comment(
+        f"{t.name} — الدرجة من {t.max_score:g}\nاترك الخلية فارغة لمن لم يُقيَّم بعد.", "المنارة")
+
+    existing = {e.student_id: e.score for e in
+                ScoreEntry.query.filter_by(section_id=sid, tool_id=tid).all()
+                if e.student_id}
+    for i, st in enumerate(s.students, start=2):
+        ws.cell(row=i, column=1, value=st.seat_no or i - 1).alignment = Alignment(horizontal="center")
+        c = ws.cell(row=i, column=2, value=st.code)
+        c.alignment = Alignment(horizontal="center")
+        ws.cell(row=i, column=3, value=st.name)
+        sc = ws.cell(row=i, column=4, value=existing.get(st.id))
+        sc.alignment = Alignment(horizontal="center")
+    ws.freeze_panes = "A2"
+    return _xlsx_response(wb, f"scores_{t.name}_{s.name}.xlsx")
 
 
 # ── Question sheets ──
@@ -2854,10 +3168,17 @@ def student_exam_page():
 @app.route("/api/student/login", methods=["POST"])
 def student_login():
     data = request.get_json(force=True) or {}
-    code = re.sub(r"\s+", "", str(data.get("code") or "")).upper()
+    raw = re.sub(r"\s+", "", str(data.get("code") or "")).upper()
+    code = normalize_number(data.get("code"))
     st = Student.query.filter_by(code=code).first() if code else None
-    if st is None or not st.active:
-        return jsonify({"error": "رمز غير صحيح — تأكد من الرمز الذي أعطاك إياه معلّمك"}), 404
+    if st is None and raw:
+        # Students registered before numbers were introduced still hold an
+        # alphanumeric code; keep those working rather than locking them out.
+        st = Student.query.filter_by(code=raw).first()
+    if st is None:
+        return jsonify({"error": "رقم غير صحيح — تأكد من رقمك لدى معلّمك"}), 404
+    if not st.active:
+        return jsonify({"error": "حسابك موقوف — راجع معلّمك"}), 403
     session[STUDENT_SESSION_KEY] = st.id
     session.permanent = False
     return jsonify({"student": {"id": st.id, "name": st.name,
@@ -2911,6 +3232,55 @@ def student_me():
         "student": {"id": st.id, "name": st.name, "code": st.code,
                     "section": st.section.name, "grade": st.section.grade.name},
         "exams": exams,
+    })
+
+
+@app.route("/api/student/results")
+def student_results():
+    """Everything the teacher has marked for this student, in their own name.
+
+    Papers marked inside the platform and exams the student sat both land in the
+    same score log, so both show up here.
+    """
+    st = current_student()
+    if st is None:
+        return jsonify({"error": "سجّل الدخول برقمك"}), 401
+
+    grade = st.section.grade
+    entries = {
+        e.tool_id: e for e in
+        ScoreEntry.query.filter_by(section_id=st.section_id, student_id=st.id).all()
+    }
+    tools = sorted(grade.tools, key=lambda x: (tool_date(grade.user, x) or date.max))
+    items, earned, out_of = [], 0.0, 0.0
+    for t in tools:
+        e = entries.get(t.id)
+        if e:
+            earned += e.score or 0
+            out_of += e.max_score or 0
+        items.append({
+            "tool": t.name,
+            "kind": t.kind,
+            "lesson": t.lesson,
+            "max_score": t.max_score,
+            "date": iso(tool_date(grade.user, t)),
+            "score": (round(e.score, 2) if e else None),
+            "percentage": (round(e.percentage, 1) if e else None),
+            "band": (band_of(e.percentage) if e else None),
+            "source": (e.source or "teacher") if e else None,
+        })
+
+    marked = [x for x in items if x["score"] is not None]
+    return jsonify({
+        "student": {"name": st.name, "code": st.code,
+                    "section": st.section.name, "grade": grade.name},
+        "results": items,
+        "marked": len(marked),
+        "total_tools": len(items),
+        "earned": round(earned, 2),
+        "out_of": round(out_of, 2),
+        "average": round(statistics.mean([x["percentage"] for x in marked]), 1) if marked else None,
+        "band": band_of(statistics.mean([x["percentage"] for x in marked])) if marked else None,
     })
 
 
@@ -3062,7 +3432,8 @@ def ensure_columns():
         "tool": [("applied_date", "DATE")],
         "score_entry": [("student_id", "INTEGER"), ("source", "VARCHAR(12)")],
         "student": [("seat_no", "INTEGER")],
-        "exam_run": [("label", "VARCHAR(120)"), ("show_score", "BOOLEAN")],
+        "exam_run": [("label", "VARCHAR(120)"), ("show_score", "BOOLEAN"),
+                     ("allowed_json", "TEXT")],
     }
     for table, cols in wanted.items():
         try:
