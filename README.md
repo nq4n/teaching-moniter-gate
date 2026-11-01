@@ -29,6 +29,20 @@ A modern web application for managing IT curriculum and tracking student grades 
 
 ---
 
+## 🧪 Tests
+
+```bash
+python tests/run.py            # every suite
+python tests/run.py numbers    # only matching names
+```
+
+No setup needed — each script runs the app against its own throw-away SQLite
+file. Five suites cover exam runs and marking, roster and question uploads,
+per-student grading, student numbers and results, and 32 students submitting
+at the same moment. See [tests/README.md](tests/README.md).
+
+---
+
 ## 🚀 Quick Start
 
 ### 5-Minute Setup
