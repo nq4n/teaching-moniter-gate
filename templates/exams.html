@@ -74,7 +74,21 @@
           </div>
 
           <div class="card">
-            <div class="hd"><h3>إضافة سؤال</h3></div>
+            <div class="hd"><h3>رفع ورقة أسئلة</h3><div class="spacer"></div>
+              <a class="btn ghost sm" id="qTpl" href="#">تحميل القالب</a></div>
+            <p class="lead">ارفع أسئلة الاختبار دفعة واحدة من Excel أو CSV. القالب يشرح الأعمدة،
+              ويقبل الإجابة الصحيحة بحرفها (أ) أو رقمها (1) أو نصّها — وتُعرض لك كل الأسئلة قبل الحفظ.</p>
+            <div class="drop" id="qdrop" onclick="document.getElementById('qfile').click()">
+              <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5-5 5 5M12 5v13"/></svg></div>
+              <div class="t">اسحب ورقة الأسئلة هنا أو اضغط للاختيار</div>
+              <div class="s">Excel ‏(.xlsx) أو CSV — اختيار من متعدد، صح/خطأ، وإجابة قصيرة</div>
+            </div>
+            <input type="file" id="qfile" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="qpick(this.files[0])">
+            <div id="qprev"></div>
+          </div>
+
+          <div class="card">
+            <div class="hd"><h3>إضافة سؤال يدويًا</h3></div>
             <div class="pickers" style="margin-top:14px">
               <div><label>نوع السؤال</label>
                 <select id="n-type" onchange="onType()">
@@ -193,7 +207,9 @@ function drawOpts(){
     </div>`).join('');
 }
 async function loadTool(){
-  const tid=curTid(); if(!tid){el('qlist').innerHTML='';el('qEmpty').style.display='block';return;}
+  const tid=curTid();
+  el('qTpl').href=tid?`/api/tools/${tid}/questions-template.xlsx`:'#';
+  if(!tid){el('qlist').innerHTML='';el('qEmpty').style.display='block';return;}
   const d=await fetch(`/api/tools/${tid}/questions`).then(r=>r.json());
   const qs=d.questions||[];
   el('qsum').textContent=`${qs.length} سؤال · ${d.total_points} نقطة → ${d.tool.max_score} درجة`;
@@ -232,6 +248,77 @@ async function addQ(){
   else toast(d.error||'تعذّرت الإضافة',false);
 }
 async function delQ(id){if(!confirm('حذف هذا السؤال؟'))return;const r=await fetch(`/api/questions/${id}`,{method:'DELETE'});if(r.ok){await loadTool();toast('تم الحذف');}}
+
+/* ── Question sheet upload ── */
+let QFILE=null;
+const qdrop=el('qdrop');
+['dragenter','dragover'].forEach(e=>qdrop.addEventListener(e,ev=>{ev.preventDefault();qdrop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>qdrop.addEventListener(e,ev=>{ev.preventDefault();qdrop.classList.remove('over');}));
+qdrop.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)qpick(f);});
+
+async function qpick(f){
+  if(!f)return;
+  if(!curTid()){toast('اختر أداة قياس أولًا',false);return;}
+  if(!/\.(xlsx|xlsm|csv)$/i.test(f.name)){toast('الملف يجب أن يكون Excel أو CSV',false);return;}
+  QFILE=f;qdrop.classList.add('busy');
+  const d=await qsend(0,false);
+  qdrop.classList.remove('busy');
+  if(d)qShow(d,f.name);
+}
+async function qsend(commit,replace){
+  const fd=new FormData();
+  fd.append('file',QFILE);fd.append('commit',String(commit));fd.append('replace',replace?'1':'0');
+  const r=await fetch(`/api/tools/${curTid()}/questions/import`,{method:'POST',body:fd});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast(d.error||'تعذّرت قراءة الملف',false);el('qprev').innerHTML='';return null;}
+  return d;
+}
+const QT={mcq:'اختيار',tf:'صح/خطأ',text:'قصيرة'};
+function qShow(d,fname){
+  if(!d.found){
+    el('qprev').innerHTML=`<div class="prev">
+      <div class="ph"><span class="pill warn">لا جديد</span><div class="spacer"></div>
+        <button class="btn ghost sm" onclick="qCancel()">إغلاق</button></div>
+      <div class="warn">لم أجد أسئلة صالحة في <b>${esc(fname)}</b>. استخدم القالب الجاهز.
+        ${d.rejected_count?'<br>'+d.rejected.map(r=>`صف ${r.row}: ${esc(r.reason)}`).join('<br>'):''}</div></div>`;
+    return;
+  }
+  const warn=[];
+  if(d.rejected_count)warn.push(`<b>${d.rejected_count}</b> صفًا تُجوهل:<br>`+
+    d.rejected.map(r=>`صف ${r.row}: ${esc(r.reason)}${r.text?` — «${esc(r.text)}»`:''}`).join('<br>'));
+  const types=Object.entries(d.by_type).filter(([,n])=>n).map(([k,n])=>`${n} ${QT[k]}`).join(' · ');
+  el('qprev').innerHTML=`
+    <div class="prev">
+      <div class="ph">
+        <span class="pill open">${d.found} سؤالًا</span>
+        <span class="pill warn">${d.total_points} نقطة → ${d.max_score} درجة</span>
+        <span class="muted">${types}${d.sheet?` · ورقة «${esc(d.sheet)}»`:''}</span>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="qCancel()">إلغاء</button>
+        <button class="btn ghost sm" onclick="qSave(true)">استبدال الأسئلة</button>
+        <button class="btn sm" onclick="qSave(false)">إضافة</button>
+      </div>
+      <div class="pb"><table><tbody>${d.preview.map((p,i)=>
+        `<tr><td style="width:28px" class="muted">${i+1}</td>
+             <td>${esc(p.text)}</td>
+             <td style="width:74px"><span class="pill">${QT[p.qtype]}</span></td>
+             <td style="width:60px" class="muted">${p.points} ن</td>
+             <td style="width:150px"><span class="pill open">${esc(p.correct||'يدوي')}</span></td></tr>`).join('')}
+        ${d.found>d.preview.length?`<tr><td></td><td class="muted">… و${d.found-d.preview.length} سؤالًا آخر</td></tr>`:''}
+      </tbody></table></div>
+      ${warn.length?`<div class="warn">${warn.join('<br>')}</div>`:''}
+    </div>`;
+}
+function qCancel(){QFILE=null;el('qfile').value='';el('qprev').innerHTML='';}
+async function qSave(replace){
+  if(replace&&!confirm('استبدال كل أسئلة هذه الأداة بأسئلة الملف؟'))return;
+  qdrop.classList.add('busy');
+  const d=await qsend(1,replace);
+  qdrop.classList.remove('busy');
+  if(!d)return;
+  qCancel();await loadTool();
+  toast(`${replace?'استُبدلت بـ':'أُضيف'} ${d.added} سؤالًا`);
+}
 
 /* ── Runs ── */
 async function createRun(now){

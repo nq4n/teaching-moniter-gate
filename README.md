@@ -97,6 +97,21 @@ teaching-moniter-gate/
   submitted can't see or re-enter it, and the first round's results are untouched
 - Live monitor per run: submitted / in progress / absent, average, and per-paper manual marking
 
+### ⚡ Fast setup by upload
+- **Roster upload** — drop an .xlsx/.csv of the section; the name column is detected
+  automatically, serial prefixes and blank rows are stripped, duplicates are flagged,
+  and the whole thing is previewed before anything is written
+- **Question-sheet upload** — a whole exam paper from one spreadsheet; the correct
+  answer is accepted as a letter (أ), a number (1), or the option text
+- Ready-made templates and an Excel export of every student's login code
+
+### ✅ Per-student marking — تقييم الطلبة
+Activities, projects and dialogue are marked against the **named roster**, not as an
+anonymous column: a score box per student with live percentage and band. For activities,
+select the whole class and apply one mark in a click — each score still belongs to its
+student. Exam tools fill themselves in from the students' own submissions, labelled by
+source, and a teacher edit overrides the automatic mark.
+
 **👉 Full guide (Arabic): [EXAMS.md](EXAMS.md)**
 
 

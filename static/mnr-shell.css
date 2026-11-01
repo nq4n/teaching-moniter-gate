@@ -75,3 +75,32 @@ tr:last-child td{border-bottom:none}
 .stat .v{font-size:22px;font-weight:700;line-height:1.2}
 .stat .k{font-size:11.5px;color:#6B7486;margin-top:2px}
 @media print{.side,.top,.noprint{display:none!important}.body{padding:0;max-width:none}.card{border:none}}
+
+/* ── Upload dropzone + preview ── */
+.drop{border:2px dashed #CFD6E4;border-radius:14px;padding:26px 20px;text-align:center;background:#FBFCFE;transition:.15s;cursor:pointer}
+.drop:hover{border-color:#2D5BFF;background:#F5F8FF}
+.drop.over{border-color:#2D5BFF;background:#EEF2FF;transform:scale(1.005)}
+.drop .ic{width:40px;height:40px;margin:0 auto 10px;color:#2D5BFF}
+.drop .ic svg{width:40px;height:40px;stroke-width:1.6}
+.drop .t{font-weight:600;font-size:14.5px}
+.drop .s{font-size:12.5px;color:#8A93A3;margin-top:5px;line-height:1.8}
+.drop.busy{opacity:.6;pointer-events:none}
+.prev{border:1px solid #E6E8EE;border-radius:13px;margin-top:14px;overflow:hidden}
+.prev .ph{display:flex;align-items:center;gap:10px;padding:12px 15px;background:#F8FAFF;border-bottom:1px solid #E6E8EE;flex-wrap:wrap}
+.prev .ph .spacer{margin-inline-start:auto}
+.prev .pb{padding:4px 15px 12px;max-height:290px;overflow:auto}
+.prev .warn{padding:10px 15px;background:#FFF9EC;border-top:1px solid #F3E4C4;font-size:12.5px;color:#8A5B11;line-height:1.8}
+.steps{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:16px}
+.step{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#646D7E;background:#fff;border:1px solid #E6E8EE;border-radius:999px;padding:6px 13px}
+.step b{display:flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#EEF2FF;color:#2D5BFF;font-size:11px}
+.step.done{border-color:#BFE8E0;background:#F3FBF9;color:#0C7266}
+.step.done b{background:#0F9488;color:#fff}
+.hint{background:#F8FAFF;border:1px solid #E1E8FF;border-radius:12px;padding:13px 16px;font-size:13px;color:#3A4150;line-height:1.9}
+.hint b{color:#15171E}
+.hint a{color:#2D5BFF;font-weight:600}
+.linkbtn{background:none;border:none;color:#2D5BFF;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px}
+.linkbtn.del{color:#B42318}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.split{grid-template-columns:1fr}}
+.or{display:flex;align-items:center;gap:12px;margin:18px 0;color:#8A93A3;font-size:12px;font-weight:600}
+.or::before,.or::after{content:"";flex:1;height:1px;background:#E6E8EE}

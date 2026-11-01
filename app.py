@@ -21,6 +21,7 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date, timedelta, timezone
 import hashlib
+import io
 import json
 import os
 import re
@@ -68,6 +69,24 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-key-change-in-production")
 app.config["JSON_SORT_KEYS"] = False
 app.config["JSON_AS_ASCII"] = False  # keep Arabic readable in JSON responses
+
+# Uploads: roster / question sheets. Anything larger is a mistake, not a class.
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "8")) * 1024 * 1024
+
+# Session cookies. Students sign in with a code and keep a plain Flask session,
+# so these matter in production as much as the teacher login does.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.getenv("SESSION_COOKIE_SECURE", "1" if os.getenv("FLASK_ENV") == "production" else "0")
+    .lower() in ("1", "true", "yes")
+)
+
+# Render / any reverse proxy terminates TLS, so trust its forwarded headers —
+# otherwise request.host_url hands out an http:// link on an https:// site.
+if os.getenv("TRUST_PROXY", "1").lower() in ("1", "true", "yes"):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 CORS(app)
 db = SQLAlchemy(app)
@@ -478,6 +497,13 @@ def exams_page():
 @login_required
 def students_page():
     return render_template("students.html", username=current_user.username,
+                           school=current_user.school)
+
+
+@app.route("/grading")
+@login_required
+def grading_page():
+    return render_template("grading.html", username=current_user.username,
                            school=current_user.school)
 
 
@@ -2173,6 +2199,644 @@ def _finalize_attempt(a, earned, total, manual=False):
         tool.applied_date = (run.start_at or utcnow()).date()
 
 
+# ── Per-student marking (تقييم الطلبة) ──
+# The teacher marks a named roster one student at a time: the student sits the
+# exam and the teacher reviews it afterwards. For activities and projects there
+# is no exam to sit, so the UI can select the whole class and apply one mark —
+# that still arrives here as one score per student, never as an anonymous block.
+
+@app.route("/api/sections/<int:sid>/tools/<int:tid>/roster-scores", methods=["GET", "POST"])
+@login_required
+def roster_scores(sid, tid):
+    s = Section.query.get_or_404(sid)
+    t = Tool.query.get_or_404(tid)
+    if not _owns_section(s) or not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+    if t.grade_id != s.grade_id:
+        return jsonify({"error": "الأداة لا تخص صف هذه الشعبة"}), 400
+
+    max_score = float(t.max_score or 100)
+
+    if request.method == "POST":
+        data = request.get_json(force=True) or {}
+        incoming = data.get("scores") or {}
+        if data.get("applied_date") not in (None, ""):
+            t.applied_date = parse_date(data.get("applied_date"))
+        by_id = {x.id: x for x in s.students}
+        saved, cleared, rejected = 0, 0, []
+        for key, raw in incoming.items():
+            try:
+                st_id = int(key)
+            except (TypeError, ValueError):
+                continue
+            if st_id not in by_id:
+                continue
+            entry = ScoreEntry.query.filter_by(
+                section_id=sid, tool_id=tid, student_id=st_id).first()
+            # An empty value means "not marked yet" — remove any existing score.
+            if raw in (None, ""):
+                if entry is not None:
+                    db.session.delete(entry)
+                    cleared += 1
+                continue
+            try:
+                v = float(raw)
+            except (TypeError, ValueError):
+                rejected.append({"student_id": st_id, "value": str(raw)})
+                continue
+            if v < 0 or v > max_score:
+                rejected.append({"student_id": st_id, "value": v})
+                continue
+            if entry is None:
+                entry = ScoreEntry(section_id=sid, tool_id=tid, student_id=st_id)
+                db.session.add(entry)
+            entry.score = v
+            entry.max_score = max_score
+            entry.percentage = round((v / max_score) * 100, 2) if max_score else 0
+            entry.source = "teacher"
+            saved += 1
+        if not t.applied_date and saved:
+            t.applied_date = date.today()
+        db.session.commit()
+        outcome = {"saved": saved, "cleared": cleared, "rejected": rejected}
+        if rejected:
+            outcome["error"] = f"درجات خارج النطاق (0–{max_score:g}) لم تُحفظ"
+    else:
+        outcome = {}
+
+    rows = {
+        e.student_id: e for e in
+        ScoreEntry.query.filter_by(section_id=sid, tool_id=tid).all()
+        if e.student_id
+    }
+    # An exam run for this tool means these marks come from the students' own
+    # submissions; the teacher reviews rather than keys them in.
+    runs = ExamRun.query.filter_by(tool_id=tid, section_id=sid).all()
+    attempts = {}
+    for r in runs:
+        for a in r.attempts:
+            if a.status == "submitted":
+                attempts[a.student_id] = (r, a)
+
+    students = []
+    for st in s.students:
+        e = rows.get(st.id)
+        run_att = attempts.get(st.id)
+        students.append({
+            "id": st.id, "name": st.name, "code": st.code, "seat_no": st.seat_no,
+            "active": bool(st.active),
+            "score": (round(e.score, 2) if e else None),
+            "percentage": (round(e.percentage, 1) if e else None),
+            "band": (band_of(e.percentage) if e else None),
+            "source": (e.source or "teacher") if e else None,
+            "run_id": (run_att[0].id if run_att else None),
+            "attempt_id": (run_att[1].id if run_att else None),
+            "needs_review": bool(run_att[1].needs_review) if run_att else False,
+        })
+
+    marked = [x for x in students if x["score"] is not None]
+    anon = ScoreEntry.query.filter_by(
+        section_id=sid, tool_id=tid, student_id=None).count()
+    return jsonify(dict(outcome, **{
+        "tool": {"id": t.id, "name": t.name, "kind": t.kind, "max_score": max_score,
+                 "lesson": t.lesson, "week": t.week, "applied_date": iso(t.applied_date),
+                 "questions": len(t.questions), "is_exam": bool(t.questions)},
+        "section": {"id": s.id, "name": s.name, "grade": s.grade.name},
+        "students": students,
+        "marked": len(marked),
+        "total": len(students),
+        "average": round(statistics.mean([x["percentage"] for x in marked]), 1) if marked else None,
+        "has_runs": bool(runs),
+        "anonymous_scores": anon,
+    })), (207 if outcome.get("rejected") else 200)
+
+
+# ── Bulk upload: roster & question sheets ──
+# Both accept .xlsx/.xlsm/.csv and both run in two passes: commit=0 previews
+# what would happen, commit=1 saves it. Nothing is written on a preview.
+
+NAME_HEADERS = {
+    "الاسم", "اسم", "اسم الطالب", "أسماء الطلبة", "اسماء الطلبة", "الطالب",
+    "الطالبة", "اسم الطالبة", "الاسم الكامل", "name", "student", "student name",
+    "full name",
+}
+SEAT_HEADERS = {"م", "رقم", "الرقم", "ت", "no", "no.", "#", "seq", "رقم الطالب", "التسلسل"}
+SERIAL_RE = re.compile(r"^\s*\d+\s*[-.،)\]\t]\s*")
+
+
+def _read_table(file_storage, sheet=None):
+    """Read an uploaded .xlsx/.xlsm/.csv into a list of rows (list of cells)."""
+    fname = (file_storage.filename or "").lower()
+    raw = file_storage.read()
+    if not raw:
+        raise ValueError("empty")
+    if fname.endswith((".xlsx", ".xlsm")):
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
+        ws = _pick_sheet(wb, sheet)
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        names = list(wb.sheetnames)
+        title = ws.title
+        wb.close()
+        return rows, title, names
+    import csv as _csv
+    text = raw.decode("utf-8-sig", errors="replace")
+    sample = text[:4096]
+    try:
+        dialect = _csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except _csv.Error:
+        dialect = _csv.excel
+    return [r for r in _csv.reader(io.StringIO(text), dialect)], None, []
+
+
+def _cell(v):
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return re.sub(r"\s+", " ", str(v)).strip()
+
+
+def _looks_like_name(v):
+    """A roster cell: has letters, isn't a bare number or a date."""
+    if not v or len(v) > 120:
+        return False
+    if re.fullmatch(r"[\d\s./\-:]+", v):
+        return False
+    return bool(re.search(r"[^\W\d_]", v, re.UNICODE))
+
+
+def _find_roster_columns(rows):
+    """Locate the name column (and a seat column if present).
+
+    Prefers an explicit header; falls back to whichever column holds the most
+    name-ish cells, so a bare one-column list of names works too.
+    """
+    for i, row in enumerate(rows[:12]):
+        cells = [_norm(_cell(c)) for c in row]
+        for j, c in enumerate(cells):
+            if c in NAME_HEADERS:
+                seat = next((k for k, x in enumerate(cells) if x in SEAT_HEADERS), None)
+                return j, seat, i + 1
+    best, best_n = None, 0
+    width = max((len(r) for r in rows), default=0)
+    for j in range(width):
+        n = sum(1 for r in rows if j < len(r) and _looks_like_name(_cell(r[j])))
+        if n > best_n:
+            best, best_n = j, n
+    if best is None or best_n == 0:
+        return None, None, 0
+    return best, None, 0
+
+
+def _clean_name(v):
+    return SERIAL_RE.sub("", _cell(v)).strip()
+
+
+@app.route("/api/sections/<int:sid>/students/import", methods=["POST"])
+@login_required
+def import_students(sid):
+    """Register a whole section from a file.
+
+    multipart/form-data: file=<xlsx|csv>, commit=0|1, sheet=<name>,
+    skip_duplicates=1|0. commit=0 previews without saving anything.
+    """
+    s = Section.query.get_or_404(sid)
+    if not _owns_section(s):
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "لم يُرفع ملف"}), 400
+    commit = str(request.form.get("commit", "0")).lower() in ("1", "true", "yes")
+    skip_dupes = str(request.form.get("skip_duplicates", "1")).lower() in ("1", "true", "yes")
+
+    try:
+        rows, sheet_used, sheets = _read_table(f, request.form.get("sheet"))
+    except Exception:
+        return jsonify({"error": "تعذّر قراءة الملف — تأكد أنه Excel (.xlsx) أو CSV"}), 400
+    if not rows:
+        return jsonify({"error": "الملف فارغ"}), 400
+
+    name_col, seat_col, start = _find_roster_columns(rows)
+    if name_col is None:
+        return jsonify({"error": "لم أجد عمود الأسماء — سمِّ العمود «الاسم» أو استخدم القالب الجاهز"}), 400
+
+    existing = {_norm(x.name) for x in s.students}
+    names, duplicates, ignored, seen = [], [], 0, set()
+    for r in rows[start:]:
+        raw = _cell(r[name_col]) if name_col < len(r) else ""
+        name = _clean_name(raw)
+        if not _looks_like_name(name) or _norm(name) in NAME_HEADERS:
+            if raw:
+                ignored += 1
+            continue
+        key = _norm(name)
+        if key in existing or key in seen:
+            duplicates.append(name)
+            if skip_dupes:
+                continue
+        seen.add(key)
+        seat = None
+        if seat_col is not None and seat_col < len(r):
+            try:
+                seat = int(float(_cell(r[seat_col])))
+            except (TypeError, ValueError):
+                seat = None
+        names.append((name[:120], seat))
+
+    limit = 300
+    over = max(0, len(names) - limit)
+    names = names[:limit]
+
+    result = {
+        "check": not commit,
+        "sheet": sheet_used,
+        "sheets": sheets,
+        "found": len(names),
+        "duplicates": len(duplicates),
+        "duplicate_names": duplicates[:20],
+        "ignored": ignored,
+        "over_limit": over,
+        "preview": [{"name": n, "seat_no": st} for n, st in names[:15]],
+        "column": name_col + 1,
+        "has_seat_column": seat_col is not None,
+    }
+    if not commit:
+        return jsonify(result), 200
+    if not names:
+        if duplicates:
+            # Re-uploading the same roster is not a failure — say so plainly.
+            result["added"] = 0
+            result["note"] = "جميع الأسماء في الملف مسجّلة بالفعل في هذه الشعبة"
+            result["students"] = []
+            return jsonify(result), 200
+        return jsonify({"error": "لا توجد أسماء صالحة في الملف"}), 400
+
+    nxt = max([x.seat_no or 0 for x in s.students] or [0])
+    created = []
+    for name, seat in names:
+        if seat is None:
+            nxt += 1
+            seat = nxt
+        else:
+            nxt = max(nxt, seat)
+        st = Student(section_id=sid, name=name, code=gen_student_code(), seat_no=seat)
+        db.session.add(st)
+        created.append(st)
+    db.session.flush()
+    s.student_count = max(s.student_count or 0, len(s.students))
+    db.session.commit()
+    result["added"] = len(created)
+    result["students"] = [_student_json(x) for x in created]
+    return jsonify(result), 201
+
+
+@app.route("/api/sections/<int:sid>/students-template.xlsx")
+@login_required
+def students_template(sid):
+    """A two-column sheet to fill with the roster and upload back."""
+    s = Section.query.get_or_404(sid)
+    if not _owns_section(s):
+        return jsonify({"error": "غير مصرّح"}), 403
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الطلبة"
+    ws.sheet_view.rightToLeft = True
+    hdr = Font(bold=True, color="FFFFFF")
+    fill = PatternFill("solid", fgColor="2D5BFF")
+    for j, (title, width) in enumerate([("م", 7), ("الاسم", 34)], start=1):
+        c = ws.cell(row=1, column=j, value=title)
+        c.font, c.fill = hdr, fill
+        c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[c.column_letter].width = width
+    for i in range(2, 32):
+        ws.cell(row=i, column=1, value=i - 1).alignment = Alignment(horizontal="center")
+    ws.freeze_panes = "A2"
+    return _xlsx_response(wb, f"students_template_{s.grade.name}_{s.name}.xlsx")
+
+
+@app.route("/api/sections/<int:sid>/students.xlsx")
+@login_required
+def students_export(sid):
+    """Export the roster WITH each student's login code, to hand out or archive."""
+    s = Section.query.get_or_404(sid)
+    if not _owns_section(s):
+        return jsonify({"error": "غير مصرّح"}), 403
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الرموز"
+    ws.sheet_view.rightToLeft = True
+    hdr = Font(bold=True, color="FFFFFF")
+    fill = PatternFill("solid", fgColor="2D5BFF")
+    for j, (title, width) in enumerate([("م", 7), ("الاسم", 34), ("رمز الدخول", 18)], start=1):
+        c = ws.cell(row=1, column=j, value=title)
+        c.font, c.fill = hdr, fill
+        c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[c.column_letter].width = width
+    for i, st in enumerate(s.students, start=2):
+        ws.cell(row=i, column=1, value=st.seat_no or i - 1).alignment = Alignment(horizontal="center")
+        ws.cell(row=i, column=2, value=st.name)
+        c = ws.cell(row=i, column=3, value=st.code)
+        c.font = Font(bold=True, name="Consolas")
+        c.alignment = Alignment(horizontal="center")
+    ws.freeze_panes = "A2"
+    return _xlsx_response(wb, f"codes_{s.grade.name}_{s.name}.xlsx")
+
+
+def _xlsx_response(wb, filename):
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return send_file(
+        bio, as_attachment=True, download_name=filename.replace(" ", "_"),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ── Question sheets ──
+
+Q_HEADERS = {
+    "text": {"السؤال", "نص السؤال", "الأسئلة", "question", "q"},
+    "qtype": {"النوع", "نوع السؤال", "type"},
+    "points": {"الدرجة", "النقاط", "الدرجات", "points", "mark", "marks", "score"},
+    "correct": {"الإجابة", "الاجابة", "الإجابة الصحيحة", "الاجابة الصحيحة", "answer",
+                "correct", "correct answer"},
+}
+OPTION_HEADERS = {"أ": 0, "ا": 0, "ب": 1, "ج": 2, "د": 3, "هـ": 4, "ه": 4, "و": 5,
+                  "a": 0, "b": 1, "c": 2, "d": 3, "e": 4, "f": 5}
+OPTION_PREFIX = re.compile(r"^(?:خيار|الخيار|option|opt)\s*([0-9٠-٩]+|[a-f]|[أابجدهو])$", re.I)
+TRUE_WORDS = {"صح", "صحيح", "نعم", "true", "t", "yes", "1", "√"}
+FALSE_WORDS = {"خطأ", "خطا", "غلط", "لا", "false", "f", "no", "0", "x", "✗"}
+MCQ_WORDS = {"اختيار", "اختيار من متعدد", "متعدد", "mcq", "choice", "multiple choice"}
+TF_WORDS = {"صح وخطأ", "صح/خطأ", "صح أو خطأ", "صواب وخطأ", "tf", "true/false", "true false"}
+TEXT_WORDS = {"مقالي", "إجابة قصيرة", "اجابة قصيرة", "قصيرة", "كتابي", "text", "short", "essay"}
+
+
+def _parse_question_row(cells, cols):
+    """Turn one sheet row into question kwargs, or (None, reason)."""
+    get = lambda k: _cell(cells[cols[k]]) if cols.get(k) is not None and cols[k] < len(cells) else ""
+    text = get("text")
+    if not text:
+        return None, "لا نص"
+
+    options = []
+    for idx in cols["options"]:
+        if idx < len(cells):
+            v = _cell(cells[idx])
+            if v:
+                options.append(v)
+
+    raw_type = _norm(get("qtype"))
+    qtype = None
+    if raw_type:
+        if raw_type in MCQ_WORDS or any(w in raw_type for w in MCQ_WORDS):
+            qtype = "mcq"
+        elif raw_type in TF_WORDS or any(w in raw_type for w in TF_WORDS):
+            qtype = "tf"
+        elif raw_type in TEXT_WORDS or any(w in raw_type for w in TEXT_WORDS):
+            qtype = "text"
+    ans = get("correct")
+    if qtype is None:
+        if len(options) >= 2:
+            qtype = "mcq"
+        elif _norm(ans) in TRUE_WORDS | FALSE_WORDS:
+            qtype = "tf"
+        else:
+            qtype = "text"
+
+    try:
+        points = float(get("points") or 1)
+    except ValueError:
+        points = 1.0
+    if points <= 0:
+        points = 1.0
+
+    if qtype == "mcq":
+        if len(options) < 2:
+            return None, "خيارات ناقصة"
+        correct = _match_option(ans, options)
+        if correct is None:
+            return None, "الإجابة الصحيحة غير واضحة"
+        return dict(text=text, qtype="mcq", options=options,
+                    correct=str(correct), points=points), None
+    if qtype == "tf":
+        na = _norm(ans)
+        if na in TRUE_WORDS:
+            correct = "true"
+        elif na in FALSE_WORDS:
+            correct = "false"
+        else:
+            return None, "الإجابة الصحيحة غير واضحة"
+        return dict(text=text, qtype="tf", options=[], correct=correct, points=points), None
+    return dict(text=text, qtype="text", options=[], correct=ans, points=points), None
+
+
+def _match_option(ans, options):
+    """Resolve an answer cell to an option index: letter, number, or the text itself."""
+    a = _cell(ans)
+    if not a:
+        return None
+    key = _norm(a)
+    # exact option text
+    for i, o in enumerate(options):
+        if _norm(o) == key:
+            return i
+    # a letter (أ ب ج د / a b c d), optionally with a trailing separator
+    letter = re.sub(r"[).\-\s]+$", "", a).strip()
+    if _norm(letter) in OPTION_HEADERS:
+        i = OPTION_HEADERS[_norm(letter)]
+        return i if i < len(options) else None
+    # a 1-based number, Arabic-Indic digits included
+    digits = a.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+    m = re.fullmatch(r"\s*(\d+)\s*", digits)
+    if m:
+        i = int(m.group(1)) - 1
+        return i if 0 <= i < len(options) else None
+    return None
+
+
+def _find_question_columns(rows):
+    """Map the header row to column indexes. Returns (cols, header_row) or (None, 0)."""
+    for i, row in enumerate(rows[:10]):
+        cells = [_norm(_cell(c)) for c in row]
+        cols = {"options": []}
+        for j, c in enumerate(cells):
+            if not c:
+                continue
+            for key, names in Q_HEADERS.items():
+                if c in names and cols.get(key) is None:
+                    cols[key] = j
+                    break
+            else:
+                m = OPTION_PREFIX.match(c)
+                if m or c in OPTION_HEADERS:
+                    cols["options"].append(j)
+        if cols.get("text") is not None:
+            cols["options"].sort()
+            return cols, i + 1
+    return None, 0
+
+
+@app.route("/api/tools/<int:tid>/questions/import", methods=["POST"])
+@login_required
+def import_questions(tid):
+    """Upload a whole question paper for one measurement tool.
+
+    multipart/form-data: file=<xlsx|csv>, commit=0|1, replace=0|1, sheet=<name>.
+    """
+    t = Tool.query.get_or_404(tid)
+    if not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "لم يُرفع ملف"}), 400
+    commit = str(request.form.get("commit", "0")).lower() in ("1", "true", "yes")
+    replace = str(request.form.get("replace", "0")).lower() in ("1", "true", "yes")
+
+    try:
+        rows, sheet_used, sheets = _read_table(f, request.form.get("sheet"))
+    except Exception:
+        return jsonify({"error": "تعذّر قراءة الملف — تأكد أنه Excel (.xlsx) أو CSV"}), 400
+    if not rows:
+        return jsonify({"error": "الملف فارغ"}), 400
+
+    cols, start = _find_question_columns(rows)
+    if cols is None:
+        return jsonify({"error": "لم أجد عمود «السؤال» — استخدم القالب الجاهز"}), 400
+
+    parsed, rejected = [], []
+    for n, r in enumerate(rows[start:], start=start + 1):
+        if not any(_cell(c) for c in r):
+            continue
+        q, why = _parse_question_row(r, cols)
+        if q is None:
+            if why != "لا نص":
+                rejected.append({"row": n, "reason": why,
+                                 "text": _cell(r[cols["text"]])[:60] if cols["text"] < len(r) else ""})
+            continue
+        parsed.append(q)
+
+    parsed = parsed[:200]
+    kinds = {"mcq": 0, "tf": 0, "text": 0}
+    for q in parsed:
+        kinds[q["qtype"]] += 1
+    total = round(sum(q["points"] for q in parsed), 2)
+
+    result = {
+        "check": not commit,
+        "sheet": sheet_used,
+        "sheets": sheets,
+        "found": len(parsed),
+        "by_type": kinds,
+        "total_points": total,
+        "max_score": t.max_score,
+        "rejected": rejected[:20],
+        "rejected_count": len(rejected),
+        "replace": replace,
+        "preview": [
+            {"text": q["text"][:120], "qtype": q["qtype"], "points": q["points"],
+             "options": q["options"],
+             "correct": (q["options"][int(q["correct"])] if q["qtype"] == "mcq"
+                         else ("صح" if q["correct"] == "true" else "خطأ") if q["qtype"] == "tf"
+                         else q["correct"])}
+            for q in parsed[:10]
+        ],
+    }
+    if not commit:
+        return jsonify(result), 200
+    if not parsed:
+        return jsonify({"error": "لا توجد أسئلة صالحة في الملف"}), 400
+
+    if replace:
+        Question.query.filter_by(tool_id=tid).delete()
+        db.session.flush()
+    order = max([q.order or 0 for q in t.questions] or [0])
+    for q in parsed:
+        order += 1
+        db.session.add(Question(
+            tool_id=tid, text=q["text"], qtype=q["qtype"],
+            options_json=json.dumps(q["options"], ensure_ascii=False) if q["options"] else None,
+            correct=q["correct"], points=q["points"], order=order,
+        ))
+    db.session.commit()
+    result["added"] = len(parsed)
+    result["tool_total_points"] = tool_total_points(t)
+    return jsonify(result), 201
+
+
+@app.route("/api/tools/<int:tid>/questions-template.xlsx")
+@login_required
+def questions_template(tid):
+    """A question sheet pre-filled with one example of each type."""
+    t = Tool.query.get_or_404(tid)
+    if not _owns_tool(t):
+        return jsonify({"error": "غير مصرّح"}), 403
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.comments import Comment
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الأسئلة"
+    ws.sheet_view.rightToLeft = True
+    hdr = Font(bold=True, color="FFFFFF")
+    fill = PatternFill("solid", fgColor="2D5BFF")
+    headers = [("السؤال", 52), ("النوع", 16), ("الدرجة", 9),
+               ("أ", 20), ("ب", 20), ("ج", 20), ("د", 20), ("الإجابة", 16)]
+    for j, (title, width) in enumerate(headers, start=1):
+        c = ws.cell(row=1, column=j, value=title)
+        c.font, c.fill = hdr, fill
+        c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[c.column_letter].width = width
+    ws.cell(row=1, column=2).comment = Comment(
+        "اختيار / صح وخطأ / مقالي — أو اتركه فارغًا ليُستنتج تلقائيًا", "المنارة")
+    ws.cell(row=1, column=8).comment = Comment(
+        "اختيار: حرف الخيار (أ) أو رقمه (1) أو نصه\n"
+        "صح وخطأ: صح أو خطأ\n"
+        "مقالي: الإجابات المقبولة مفصولة بـ |  (اتركها فارغة للتصحيح اليدوي)", "المنارة")
+
+    examples = [
+        ["ما هي وحدة قياس سرعة المعالج؟", "اختيار", 2, "بايت", "هرتز", "بكسل", "بت", "ب"],
+        ["الإنترنت شبكة عالمية.", "صح وخطأ", 1, "", "", "", "", "صح"],
+        ["اذكر اختصار الذاكرة العشوائية.", "مقالي", 2, "", "", "", "", "RAM | الذاكرة العشوائية"],
+    ]
+    for i, row in enumerate(examples, start=2):
+        for j, v in enumerate(row, start=1):
+            cell = ws.cell(row=i, column=j, value=v)
+            if j == 1:
+                cell.alignment = Alignment(wrap_text=True, vertical="center")
+    ws.freeze_panes = "A2"
+
+    info = wb.create_sheet("تعليمات")
+    info.sheet_view.rightToLeft = True
+    info.column_dimensions["A"].width = 100
+    lines = [
+        f"أداة القياس: {t.name} — الدرجة الرسمية {t.max_score}",
+        "",
+        "املأ ورقة «الأسئلة» ثم ارفعها من صفحة الاختبارات الإلكترونية.",
+        "الأمثلة الثلاثة الموجودة للتوضيح — احذفها أو استبدلها بأسئلتك.",
+        "",
+        "• عمود «النوع» اختياري: إن تركته فارغًا يُستنتج النوع من بقية الصف.",
+        "• عمود «الدرجة» هو نقاط السؤال، وليس الدرجة النهائية. مجموع النقاط",
+        f"  يُحوَّل تلقائيًا إلى درجة الأداة الرسمية ({t.max_score}).",
+        "• يمكنك إضافة أعمدة خيارات أخرى (هـ، و) بنفس الطريقة.",
+        "• أي صف ناقص أو غير واضح يُعرض لك قبل الحفظ ولا يُضاف.",
+    ]
+    for i, line in enumerate(lines, start=1):
+        c = info.cell(row=i, column=1, value=line)
+        if i == 1:
+            c.font = Font(bold=True)
+    return _xlsx_response(wb, f"questions_template_{t.name}.xlsx")
+
+
 # ─────────────────────────────────────────────────────────────
 # Student side — code login, then sit the exam
 # ─────────────────────────────────────────────────────────────
@@ -2368,6 +3032,12 @@ def not_found(e):
     if request.path.startswith("/api/"):
         return jsonify({"error": "غير موجود"}), 404
     return redirect(url_for("index"))
+
+
+@app.errorhandler(413)
+def too_large(e):
+    mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+    return jsonify({"error": f"الملف كبير جدًا — الحد الأقصى {mb} ميجابايت"}), 413
 
 
 @app.errorhandler(500)
