@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الطلبة — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr-shell.css') }}">
+<style>
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:10px}
+.scard{border:1px solid #E6E8EE;border-radius:12px;padding:12px 13px;background:#fff;position:relative}
+.scard:hover{border-color:#CFD6E4}
+.scard .nm{font-weight:600;font-size:13.5px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scard .bot{display:flex;align-items:center;gap:8px}
+.scard .seat{font-size:11px;color:#8A93A3;margin-inline-start:auto}
+.scard .acts{display:flex;gap:2px;margin-top:6px;opacity:0;transition:.12s}
+.scard:hover .acts,.scard:focus-within .acts{opacity:1}
+.scard.off{opacity:.55}
+@media print{.scard .acts{display:none}.cards{grid-template-columns:repeat(4,1fr)}}
+.search{position:relative;max-width:260px;flex:1}
+.search input{height:36px;font-size:13px;padding-inline-start:34px}
+.search svg{position:absolute;inset-inline-start:11px;top:9px;width:17px;height:17px;color:#8A93A3;stroke-width:2}
+</style>
+</head>
+<body>
+{{ ui.loader() }}
+<div class="app">
+  {{ ui.sidenav('students', username, school) }}
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">ارفع كشف الشعبة بأرقام الطلبة — أو الصق الأسماء وتُولَّد الأرقام تلقائيًا</div><h1>تسجيل الطلبة</h1></div>
+      <div class="spacer"></div>
+      <span class="toast" id="toast"></span>
+    </header>
+
+    <div class="body">
+      <div id="noGrades" class="card" style="display:none;text-align:center;padding:40px">
+        <div style="font-weight:600;font-size:16px;margin-bottom:6px">لا توجد صفوف بعد</div>
+        <p class="muted" style="margin-bottom:18px">هيّئ صفوفك وشُعبك أولًا، ثم عُد لتسجيل الطلبة.</p>
+        <a class="btn" style="display:inline-flex" href="{{ url_for('setup_page') }}">إعداد الصفوف</a>
+      </div>
+
+      <div id="wrap" style="display:none;flex-direction:column;gap:20px">
+        <div class="steps noprint">
+          <span class="step" id="st1"><b>1</b> اختر الشعبة</span>
+          <span class="step" id="st2"><b>2</b> ارفع الكشف أو الصق الأسماء</span>
+          <span class="step" id="st3"><b>3</b> وزّع الأرقام</span>
+        </div>
+
+        <div class="card noprint">
+          <div class="hd"><h3>الشعبة</h3></div>
+          <div class="pickers" style="margin-top:14px">
+            <div><label>الصف</label><select id="grade" onchange="onGrade()"></select></div>
+            <div><label>الشعبة</label><select id="section" onchange="load()"></select></div>
+          </div>
+        </div>
+
+        <div class="card noprint">
+          <div class="hd"><h3>رفع سريع</h3><div class="spacer"></div>
+            <a class="btn ghost sm" id="tplLink" href="#">تحميل القالب</a></div>
+          <p class="lead">ارفع كشف الشعبة من Excel أو CSV. يتعرّف النظام على عمود الأسماء تلقائيًا، ويقرأ
+            <b>رقم الطالب</b> من الملف ليكون هو رقم دخوله للمنصة — ومن لا رقم له يُولَّد له واحد.
+            ويتجاهل الأرقام التسلسلية والصفوف الفارغة، وينبّهك للمكرّر <b>قبل</b> الحفظ.</p>
+
+          <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5-5 5 5M12 5v13"/></svg></div>
+            <div class="t">اسحب الملف هنا أو اضغط للاختيار</div>
+            <div class="s">Excel ‏(.xlsx) أو CSV — أعمدة: الاسم، ورقم الطالب (اختياري)</div>
+          </div>
+          <input type="file" id="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="pick(this.files[0])">
+          <div id="prev"></div>
+
+          <div class="or">أو</div>
+
+          <label>الصق الأسماء — اسم في كل سطر</label>
+          <textarea id="names" rows="4" placeholder="محمد علي الهنائي&#10;سارة سالم البلوشية&#10;3. يوسف خالد الكندي"></textarea>
+          <div style="display:flex;gap:10px;align-items:end;margin-top:13px;flex-wrap:wrap">
+            <button class="btn" onclick="addNames()">تسجيل الأسماء</button>
+            <span class="muted" style="margin:0 4px;align-self:center">أو</span>
+            <div style="max-width:150px"><label>عدد بدون أسماء</label><input type="number" id="count" min="1" max="200" placeholder="24"></div>
+            <button class="btn ghost" onclick="addCount()">توليد أرقام فقط</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="hd">
+            <h3>طلبة الشعبة <span class="pill" id="cnt">0</span></h3>
+            <div class="spacer"></div>
+            <span class="search noprint">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input id="q" placeholder="ابحث باسم أو رقم" oninput="draw()">
+            </span>
+            <a class="btn ghost sm noprint" id="xlsxLink" href="#">تصدير Excel</a>
+            <button class="btn ghost sm noprint" onclick="window.print()">طباعة الأرقام</button>
+          </div>
+          <p class="lead">رابط دخول الطلبة: <span class="code">{{ request.host_url }}exam</span> —
+            يفتحه الطالب ويُدخل <b>رقمه</b>، بلا اسم مستخدم وبلا كلمة مرور.</p>
+          <div class="cards" id="list"></div>
+          <div class="empty" id="listEmpty">لا طلبة في هذه الشعبة بعد — ارفع الكشف أو الصق الأسماء بالأعلى.</div>
+        </div>
+
+        <div class="hint noprint">
+          <b>الخطوة التالية:</b> انتقل إلى <a href="{{ url_for('exams_page') }}">الاختبارات الإلكترونية</a>
+          لرفع أسئلة أي أداة قياس ثم تشغيل الاختبار للشعبة في الوقت الذي تحدّده.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const el=id=>document.getElementById(id);
+const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let STRUCTURE=[],ROSTER=[],FILE=null;
+
+function toast(m,ok=true){const t=el('toast');t.className='toast '+(ok?'ok':'err');t.textContent=m;setTimeout(()=>t.className='toast',4200);}
+function curSid(){return el('section').value;}
+function steps(){
+  el('st1').className='step'+(curSid()?' done':'');
+  el('st2').className='step'+(ROSTER.length?' done':'');
+  el('st3').className='step'+(ROSTER.length?' done':'');
+}
+
+function onGrade(){
+  const g=STRUCTURE.find(x=>String(x.id)===el('grade').value);
+  el('section').innerHTML=(g&&g.sections||[]).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')
+    || '<option value="">— لا شُعب —</option>';
+  load();
+}
+
+async function load(){
+  const sid=curSid();
+  el('tplLink').href=sid?`/api/sections/${sid}/students-template.xlsx`:'#';
+  el('xlsxLink').href=sid?`/api/sections/${sid}/students.xlsx`:'#';
+  if(!sid){ROSTER=[];draw();return;}
+  const d=await fetch(`/api/sections/${sid}/students`).then(r=>r.json());
+  ROSTER=d.students||[];
+  draw();
+}
+function draw(){
+  const q=(el('q').value||'').trim().toLowerCase();
+  const list=q?ROSTER.filter(s=>s.name.toLowerCase().includes(q)||s.code.toLowerCase().includes(q)):ROSTER;
+  el('cnt').textContent=ROSTER.length;
+  el('listEmpty').style.display=list.length?'none':'block';
+  el('listEmpty').textContent=ROSTER.length?'لا نتائج لهذا البحث.':'لا طلبة في هذه الشعبة بعد — ارفع الكشف أو الصق الأسماء بالأعلى.';
+  el('list').innerHTML=list.map(s=>`
+    <div class="scard ${s.active?'':'off'}">
+      <div class="nm" title="${esc(s.name)}">${esc(s.name)}</div>
+      <div class="bot"><span class="code">${esc(s.code)}</span><span class="seat">${s.seat_no??''}</span></div>
+      <div class="acts noprint">
+        <button class="linkbtn" onclick="newCode(${s.id})">رقم جديد</button>
+        <button class="linkbtn" onclick="rename(${s.id})">تعديل</button>
+        <button class="linkbtn" onclick="setNum(${s.id})">تغيير الرقم</button>
+        <button class="linkbtn del" onclick="del(${s.id})">حذف</button>
+      </div>
+    </div>`).join('');
+  steps();
+}
+
+/* ── upload: preview first, then confirm ── */
+const drop=el('drop');
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)pick(f);});
+
+async function pick(f){
+  if(!f)return;
+  if(!curSid()){toast('اختر شعبة أولًا',false);return;}
+  if(!/\.(xlsx|xlsm|csv)$/i.test(f.name)){toast('الملف يجب أن يكون Excel أو CSV',false);return;}
+  FILE=f;
+  drop.classList.add('busy');
+  const d=await send(0);
+  drop.classList.remove('busy');
+  if(d)showPreview(d,f.name);
+}
+async function send(commit){
+  const fd=new FormData();
+  fd.append('file',FILE);fd.append('commit',String(commit));
+  const r=await fetch(`/api/sections/${curSid()}/students/import`,{method:'POST',body:fd});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast(d.error||'تعذّرت قراءة الملف',false);el('prev').innerHTML='';return null;}
+  return d;
+}
+function dead(msg){
+  // A preview with nothing to save still needs a way out.
+  return `<div class="prev">
+    <div class="ph"><span class="pill warn">لا جديد</span><div class="spacer"></div>
+      <button class="btn ghost sm" onclick="cancelUp()">إغلاق</button></div>
+    <div class="warn">${msg}</div></div>`;
+}
+function showPreview(d,fname){
+  if(!d.found&&d.duplicates){
+    el('prev').innerHTML=dead(`كل الأسماء في <b>${esc(fname)}</b> مسجّلة بالفعل في هذه الشعبة — لا جديد لإضافته.`);
+    return;
+  }
+  if(!d.found){
+    el('prev').innerHTML=dead(`لم أجد أسماء صالحة في <b>${esc(fname)}</b>. جرّب القالب الجاهز.`);
+    return;
+  }
+  const warn=[];
+  if(d.duplicates)warn.push(`<b>${d.duplicates}</b> اسمًا مكرّرًا سيُتجاهَل (${d.duplicate_names.slice(0,4).map(esc).join('، ')}${d.duplicates>4?' …':''})`);
+  if(d.ignored)warn.push(`<b>${d.ignored}</b> صفًا غير صالح تُجوهل`);
+  if(d.over_limit)warn.push(`الحد الأقصى 300 اسم في الرفعة الواحدة — سيُضاف أول 300 فقط`);
+  if(d.number_clash_count)warn.push(`<b>${d.number_clash_count}</b> رقمًا مستخدمًا لطالب آخر — سيُولَّد بديل:<br>`
+    +d.number_clashes.slice(0,4).map(c=>`${esc(c.name)} (${esc(c.number)})`).join('<br>'));
+  if(d.has_number_column)warn.push(`${d.from_file_numbers} رقمًا من الملف · الباقي يُولَّد`);
+  el('prev').innerHTML=`
+    <div class="prev">
+      <div class="ph">
+        <span class="pill open">${d.found} اسمًا جاهزًا</span>
+        <span class="muted">${esc(fname)}${d.sheet?` · ورقة «${esc(d.sheet)}»`:''}${d.has_seat_column?' · مع أرقام الكشف':''}</span>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="cancelUp()">إلغاء</button>
+        <button class="btn sm" onclick="confirmUp()">تسجيل ${d.found} طالبًا</button>
+      </div>
+      <div class="pb"><table><tbody>${d.preview.map(p=>
+        `<tr><td style="width:40px" class="muted">${p.seat_no??''}</td><td>${esc(p.name)}</td>
+             <td style="width:110px"><span class="code">${esc(p.number)}</span></td></tr>`).join('')}
+        ${d.found>d.preview.length?`<tr><td></td><td class="muted">… و${d.found-d.preview.length} اسمًا آخر</td></tr>`:''}
+      </tbody></table></div>
+      ${warn.length?`<div class="warn">${warn.join('<br>')}</div>`:''}
+    </div>`;
+}
+function cancelUp(){FILE=null;el('file').value='';el('prev').innerHTML='';}
+async function confirmUp(){
+  drop.classList.add('busy');
+  const d=await send(1);
+  drop.classList.remove('busy');
+  if(!d)return;
+  cancelUp();await load();
+  toast(d.added?`سُجّل ${d.added} طالبًا — وزّع الرموز عليهم`:(d.note||'لا جديد'),!!d.added);
+}
+
+/* ── paste / count ── */
+async function addNames(){
+  const sid=curSid(); if(!sid){toast('اختر شعبة',false);return;}
+  const names=el('names').value.trim(); if(!names){toast('الصق أسماء الطلبة',false);return;}
+  const r=await jreq(`/api/sections/${sid}/students`,{names});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){el('names').value='';await load();toast(`تم تسجيل ${d.added} طالبًا`);}
+  else toast(d.error||'تعذّر التسجيل',false);
+}
+async function addCount(){
+  const sid=curSid(); if(!sid){toast('اختر شعبة',false);return;}
+  const count=parseInt(el('count').value||'0',10); if(!count){toast('اكتب عدد الطلبة',false);return;}
+  const r=await jreq(`/api/sections/${sid}/students`,{count});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){el('count').value='';await load();toast(`تم توليد ${d.added} رقمًا`);}
+  else toast(d.error||'تعذّر التوليد',false);
+}
+async function newCode(id){const r=await jreq(`/api/students/${id}`,{new_code:true},'PUT');if(r.ok){await load();toast('تم توليد رقم جديد');}}
+async function rename(id){
+  const cur=(ROSTER.find(s=>s.id===id)||{}).name||'';
+  const n=prompt('اسم الطالب',cur); if(n==null)return;
+  const r=await jreq(`/api/students/${id}`,{name:n},'PUT'); if(r.ok){await load();toast('تم التعديل');}
+}
+async function setNum(id){
+  const cur=(ROSTER.find(s=>s.id===id)||{}).code||'';
+  const n=prompt('رقم الطالب (أرقام فقط) — هو رقم دخوله للمنصة',cur); if(n==null)return;
+  const r=await jreq(`/api/students/${id}`,{code:n},'PUT');
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){await load();toast('تم تغيير الرقم');}else toast(d.error||'تعذّر التغيير',false);
+}
+async function del(id){
+  if(!confirm('حذف هذا الطالب؟ ستُحذف نتائجه في الاختبارات.'))return;
+  const r=await fetch(`/api/students/${id}`,{method:'DELETE'});if(r.ok){await load();toast('تم الحذف');}
+}
+
+async function init(){
+  try{const r=await fetch('/api/structure');STRUCTURE=r.ok?await r.json():[];}catch(e){STRUCTURE=[];}
+  if(!Array.isArray(STRUCTURE))STRUCTURE=[];
+  const has=STRUCTURE.some(g=>(g.sections||[]).length);
+  el('noGrades').style.display=has?'none':'block';
+  el('wrap').style.display=has?'flex':'none';
+  if(!has)return;
+  el('grade').innerHTML=STRUCTURE.filter(g=>(g.sections||[]).length).map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  onGrade();
+}
+window.__mnrManualLoader=true;
+init().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+</script>
+</body>
+</html>

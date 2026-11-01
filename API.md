@@ -1,560 +1,266 @@
-# 🔌 Teaching Monitor - API Documentation
+# 🔌 API — المنارة / Teaching Monitor
 
-**Version:** 3.0  
-**Base URL:** `http://localhost:5000` (local) or `https://your-domain.com` (production)
+> هذا المرجع مولَّد من مسارات `app.py` الفعلية ومُراجَع يدويًا.
+> للتحقق من أنه ما زال مطابقًا: `python tests/run.py`.
 
----
-
-## 🔐 Authentication
-
-All endpoints except `/login` and `/register` require authentication.
-
-### Login
-```http
-POST /login
-Content-Type: application/x-www-form-urlencoded
-
-username=teacher1&password=mypassword
-```
-
-**Response:**
-```json
-Redirects to /dashboard if successful
-```
-
-### Register
-```http
-POST /register
-Content-Type: application/x-www-form-urlencoded
-
-username=teacher1&email=teacher@school.om&password=mypassword&school=مدرسة
-```
-
-### Logout
-```http
-POST /logout
-```
+كل الردود JSON بترميز UTF-8 والعربية فيها مقروءة (`JSON_AS_ASCII=False`).
 
 ---
 
-## 📊 Grades API
+## المصادقة
 
-### List All Grades
-```http
-GET /api/grades
-Authorization: Required
-```
+نوعان من الجلسات، منفصلان تمامًا:
 
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "name": "الصف السادس",
-    "sections": 2,
-    "students": 45
-  }
-]
-```
+| | المعلّم | الطالب |
+|---|---|---|
+| الدخول | اسم مستخدم + كلمة مرور (`/login`) | **رقم الطالب وحده** (`/api/student/login`) |
+| الآلية | Flask-Login | جلسة Flask عادية (`session["student_id"]`) |
+| الرفض | تحويل إلى `/login` أو `403` | `401` |
 
-### Create Grade
-```http
-POST /api/grades
-Authorization: Required
-Content-Type: application/json
+مسارات `/api/student/*` لا تتطلب جلسة معلّم، وبقية `/api/*` تتطلبها.
+المعلّم يصل فقط إلى صفوفه وشُعبه وأدواته — وأي محاولة لغيرها ترد `403`.
 
-{
-  "name": "الصف السابع"
-}
-```
+### صفحات (HTML)
 
-**Response:** `201 Created`
-```json
-{
-  "id": 2,
-  "name": "الصف السابع"
-}
-```
-
-### Update Grade
-```http
-PUT /api/grades/1
-Authorization: Required
-Content-Type: application/json
-
-{
-  "name": "الصف السادس - معدل"
-}
-```
-
-**Response:**
-```json
-{
-  "id": 1,
-  "name": "الصف السادس - معدل"
-}
-```
-
-### Delete Grade
-```http
-DELETE /api/grades/1
-Authorization: Required
-```
-
-**Response:** `204 No Content`
+| المسار | الصفحة |
+|---|---|
+| `GET /login` · `POST /login` | دخول المعلّم |
+| `GET /register` · `POST /register` | حساب معلّم جديد |
+| `GET /logout` | خروج المعلّم |
+| `GET /dashboard` | لوحة التحليلات |
+| `GET /setup` | إعداد الصفوف والشُعب |
+| `GET /entry` | تسجيل الدرجات (اللصق المجهول — الطريقة القديمة) |
+| `GET /lessons` | تتبّع الدروس |
+| `GET /students` | تسجيل الطلبة |
+| `GET /grading` | تقييم الطلبة |
+| `GET /exams` | الاختبارات الإلكترونية |
+| `GET /exam` | **صفحة الطالب** — الدخول بالرقم |
 
 ---
 
-## 👥 Students API
+## البنية: الصفوف والشُعب والأدوات
 
-### List Students in Grade
-```http
-GET /api/grades/1/students
-Authorization: Required
-```
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` | `/api/structure` | كل الصفوف بشُعبها وأدواتها — ما تبنى عليه كل القوائم المنسدلة |
+| `POST` | `/api/setup` | إنشاء صفوف دفعة واحدة مع بذر الأدوات والدروس |
+| `POST` | `/api/grades` | إنشاء صف |
+| `DELETE` | `/api/grades/<gid>` | حذف صف |
+| `POST` | `/api/grades/<gid>/sections` | إضافة شعبة |
+| `PUT` `DELETE` | `/api/sections/<sid>` | تعديل / حذف شعبة |
+| `POST` | `/api/grades/<gid>/tools` | إضافة أداة قياس |
+| `PUT` `DELETE` | `/api/tools/<tid>` | تعديل / حذف أداة |
+| `GET` `PUT` | `/api/term` | اسم الفصل الدراسي وتاريخ بدايته |
 
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "name": "أحمد محمد",
-    "student_id": "2024001",
-    "section": "شعبة أ",
-    "avg_grade": 82.5
-  }
-]
-```
-
-### Add Student
-```http
-POST /api/grades/1/students
-Authorization: Required
-Content-Type: application/json
-
-{
-  "name": "فاطمة علي",
-  "student_id": "2024002",
-  "section_id": 1
-}
-```
-
-**Response:** `201 Created`
-```json
-{
-  "id": 2,
-  "name": "فاطمة علي"
-}
-```
-
-### Update Student
-```http
-PUT /api/students/1
-Authorization: Required
-Content-Type: application/json
-
-{
-  "name": "أحمد محمد علي"
-}
-```
-
-### Delete Student
-```http
-DELETE /api/students/1
-Authorization: Required
-```
-
-**Response:** `204 No Content`
-
----
-
-## 📝 Student Grades API
-
-### Get Student's All Grades
-```http
-GET /api/students/1/grades
-Authorization: Required
-```
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "test_name": "اختبار الفصل الأول",
-    "score": 85,
-    "max_score": 100,
-    "percentage": 85.0,
-    "notes": "أداء جيد",
-    "date": "2026-10-06T10:30:00"
-  }
-]
-```
-
-### Record New Grade ⭐
-```http
-POST /api/students/1/grades
-Authorization: Required
-Content-Type: application/json
-
-{
-  "test_name": "اختبار الوحدة الثانية",
-  "score": 92,
-  "max_score": 100,
-  "notes": "ممتاز - مشاركة جيدة",
-  "lesson_id": 2
-}
-```
-
-**Response:** `201 Created`
-```json
-{
-  "id": 2,
-  "percentage": 92.0
-}
-```
-
-**Note:** Percentage is calculated automatically as `(score / max_score) * 100`
-
-### Update Grade Record
-```http
-PUT /api/student-grades/1
-Authorization: Required
-Content-Type: application/json
-
-{
-  "score": 88,
-  "test_name": "اختبار مراجعة",
-  "notes": "نتيجة مراجعة صحيحة"
-}
-```
-
-**Response:**
-```json
-{
-  "id": 1,
-  "percentage": 88.0
-}
-```
-
-### Delete Grade Record
-```http
-DELETE /api/student-grades/1
-Authorization: Required
-```
-
-**Response:** `204 No Content`
-
----
-
-## 📚 Lessons API
-
-### List Lessons in Grade
-```http
-GET /api/grades/1/lessons
-Authorization: Required
-```
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "unit": "الوحدة الأولى",
-    "title": "مقدمة في الحاسب الآلي",
-    "completed": true
-  }
-]
-```
-
-### Create Lesson
-```http
-POST /api/grades/1/lessons
-Authorization: Required
-Content-Type: application/json
-
-{
-  "unit": "الوحدة الثانية",
-  "title": "الشبكات والإنترنت"
-}
-```
-
-**Response:** `201 Created`
-```json
-{
-  "id": 2,
-  "title": "الشبكات والإنترنت"
-}
-```
-
-### Update Lesson
-```http
-PUT /api/lessons/1
-Authorization: Required
-Content-Type: application/json
-
-{
-  "title": "مقدمة في الحاسب الآلي - معدل",
-  "completed": true
-}
-```
-
-### Delete Lesson
-```http
-DELETE /api/lessons/1
-Authorization: Required
-```
-
-**Response:** `204 No Content`
-
----
-
-## 📊 Statistics API
-
-### Get Overall Statistics
-```http
-GET /api/statistics
-Authorization: Required
-```
-
-**Response:**
-```json
-{
-  "total_students": 90,
-  "total_grades": 3,
-  "total_records": 450,
-  "average_score": 82.75
-}
-```
-
-**Metrics:**
-- `total_students` - Number of students in all grades
-- `total_grades` - Number of grades (classes)
-- `total_records` - Total grade records entered
-- `average_score` - Average percentage across all records
-
----
-
-## 🚨 Error Responses
-
-### 400 Bad Request
-```json
-{
-  "error": "Invalid request data"
-}
-```
-
-### 401 Unauthorized
-```json
-{
-  "error": "Login required"
-}
-```
-
-### 403 Forbidden
-```json
-{
-  "error": "Unauthorized - not your data"
-}
-```
-
-### 404 Not Found
-```json
-{
-  "error": "Not found"
-}
-```
-
-### 500 Server Error
-```json
-{
-  "error": "Server error"
-}
+```jsonc
+// POST /api/setup
+{"grades": [{"name": "الصف السابع", "level": 7,
+             "sections": 2, "students_per_section": 28}],
+ "with_default_tools": true}
 ```
 
 ---
 
-## 💾 Data Types
+## الطلبة
 
-### Score Entry
-```json
-{
-  "test_name": "string (required)",
-  "score": "float (required)",
-  "max_score": "float (default: 100)",
-  "notes": "string (optional)",
-  "lesson_id": "integer (optional)"
-}
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` | `/api/sections/<sid>/students` | طلبة الشعبة بأسمائهم وأرقامهم |
+| `POST` | `/api/sections/<sid>/students` | تسجيل دفعة: `names` (سطر لكل اسم) أو `count` |
+| `PUT` `DELETE` | `/api/students/<stid>` | تعديل / حذف طالب |
+| `POST` | `/api/sections/<sid>/students/import` | رفع كشف الشعبة (`multipart`) |
+| `GET` | `/api/sections/<sid>/students-template.xlsx` | قالب كشف فارغ |
+| `GET` | `/api/sections/<sid>/students.xlsx` | تصدير الأسماء مع الأرقام |
+
+```jsonc
+// PUT /api/students/<stid>
+{"name": "محمد علي", "seat_no": 3, "active": true,
+ "code": "20231045",   // رقم الدخول — يُرفض 409 إن كان مستخدمًا
+ "new_code": true}     // أو توليد رقم بديل
 ```
 
-### Grade Record (Response)
-```json
-{
-  "id": "integer",
-  "student_id": "integer",
-  "test_name": "string",
-  "score": "float",
-  "max_score": "float",
-  "percentage": "float (auto-calculated)",
-  "notes": "string or null",
-  "date": "ISO 8601 datetime"
-}
-```
+`POST …/students/import` — حقول `multipart/form-data`:
+`file` (xlsx/xlsm/csv)، `commit=0|1` (الافتراضي معاينة بلا حفظ)،
+`sheet`، `skip_duplicates=1|0`.
 
----
+يتعرّف على عمود الأسماء من ترويسته أو من محتواه، وعلى عمود
+«رقم الطالب» فيعتمده رقم دخول — ومن لا رقم له يُولَّد له.
 
-## 📌 Common Workflows
-
-### Workflow 1: Add Student & Record First Grade
-
-```bash
-# 1. Get grade ID
-curl http://localhost:5000/api/grades
-
-# 2. Add student
-curl -X POST http://localhost:5000/api/grades/1/students \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Ahmed","student_id":"001","section_id":1}'
-
-# 3. Record grade
-curl -X POST http://localhost:5000/api/students/1/grades \
-  -H "Content-Type: application/json" \
-  -d '{"test_name":"Test 1","score":85,"max_score":100}'
-```
-
-### Workflow 2: Get Student Statistics
-
-```bash
-# 1. Get all grades for student
-curl http://localhost:5000/api/students/1/grades
-
-# 2. Calculate average (from response)
-# average = sum(percentages) / count
-
-# 3. Or use overall statistics
-curl http://localhost:5000/api/statistics
-```
-
-### Workflow 3: Update Student Grade
-
-```bash
-# 1. Get grade record ID
-curl http://localhost:5000/api/students/1/grades
-
-# 2. Update specific record
-curl -X PUT http://localhost:5000/api/student-grades/1 \
-  -H "Content-Type: application/json" \
-  -d '{"score":90,"notes":"Corrected"}'
+```jsonc
+// الرد (معاينة)
+{"check": true, "found": 28, "duplicates": 2, "duplicate_names": ["…"],
+ "ignored": 3, "over_limit": 0, "has_number_column": true,
+ "from_file_numbers": 26, "number_clashes": [{"name": "…", "number": "…"}],
+ "preview": [{"name": "محمد علي", "seat_no": 1, "number": "20231045"}]}
 ```
 
 ---
 
-## 🔄 Response Codes
+## الدرجات
 
-| Code | Meaning | Example |
-|------|---------|---------|
-| 200 | Success | GET request |
-| 201 | Created | POST request |
-| 204 | No content | DELETE request |
-| 400 | Bad request | Missing required field |
-| 401 | Unauthorized | Not logged in |
-| 403 | Forbidden | Not your data |
-| 404 | Not found | Grade doesn't exist |
-| 500 | Server error | Database error |
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` `POST` | `/api/sections/<sid>/tools/<tid>/roster-scores` | **تقييم الطلبة بأسمائهم** |
+| `POST` | `/api/sections/<sid>/tools/<tid>/scores/import` | رفع درجات مطابَقة بالطلبة |
+| `GET` | `/api/sections/<sid>/tools/<tid>/scores-template.xlsx` | كشف درجات مُعبّأ بالأسماء والأرقام |
+| `GET` | `/api/sections/<sid>/tools/<tid>/scores` | قراءة درجات أداة في شعبة |
+| `POST` | `/api/sections/<sid>/tools/<tid>/scores` | لصق عمود درجات **مجهول** (الطريقة القديمة) |
+| `POST` | `/api/sections/<sid>/import` | استيراد جدول درجات كامل للشعبة (مجهول) |
+| `GET` | `/api/sections/<sid>/template.xlsx` | قالب جدول الدرجات المجهول |
 
----
+```jsonc
+// POST /api/sections/<sid>/tools/<tid>/roster-scores
+{"scores": {"12": 18, "13": 15.5, "14": ""},   // "" يمسح الدرجة
+ "applied_date": "2026-10-05"}
 
-## 🧪 Testing with cURL
-
-### Test Login
-```bash
-curl -X POST http://localhost:5000/login \
-  -d "username=admin&password=admin"
+// الرد: 200، أو 207 إن رُفضت بعض القيم وحُفظ الباقي
+{"saved": 2, "cleared": 1, "rejected": [{"student_id": 15, "value": 999}],
+ "marked": 24, "total": 28, "average": 82.5,
+ "students": [{"id": 12, "name": "محمد علي", "code": "20231045",
+               "score": 18, "percentage": 90, "band": "متقدّم",
+               "source": "teacher", "attempt_id": null}],
+ "has_runs": false, "anonymous_scores": 0}
 ```
 
-### Test API (with session)
-```bash
-# Session from login is maintained by browser/client
-curl http://localhost:5000/api/statistics \
-  -H "Cookie: session=..."
+`source` يساوي `exam` لدرجة جاءت من حلّ الطالب، و`teacher` لما رصده المعلّم.
+الدرجات المُدخلة باللصق تبقى مجهولة (`student_id` فارغ) ولا تظهر في هذا الجدول،
+لكن عددها يُذكر في `anonymous_scores`.
+
+---
+
+## الاختبارات الإلكترونية
+
+### الأسئلة
+
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` `POST` | `/api/tools/<tid>/questions` | أسئلة الأداة / إضافة سؤال |
+| `PUT` `DELETE` | `/api/questions/<qid>` | تعديل / حذف سؤال |
+| `POST` | `/api/tools/<tid>/questions/import` | رفع ورقة أسئلة (`commit`, `replace`) |
+| `GET` | `/api/tools/<tid>/questions-template.xlsx` | قالب الأسئلة |
+
+```jsonc
+// POST /api/tools/<tid>/questions
+{"text": "ما هي وحدة قياس سرعة المعالج؟", "qtype": "mcq",
+ "options": ["بايت", "هرتز", "بكسل"], "correct": "1", "points": 4}
+
+// qtype: "mcq"  → correct = فهرس الخيار الصحيح (نصًّا)
+//        "tf"   → correct = "true" | "false"
+//        "text" → correct = إجابات مقبولة مفصولة بـ |  (فارغة = تصحيح يدوي)
 ```
 
-### Test with Python
-```python
-import requests
+### التشغيل
 
-session = requests.Session()
-session.post('http://localhost:5000/login', 
-    data={'username': 'admin', 'password': 'admin'})
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` | `/api/runs` | كل تشغيلات المعلّم |
+| `POST` | `/api/tools/<tid>/runs` | تشغيل الاختبار لشعبة |
+| `GET` `PUT` `DELETE` | `/api/runs/<rid>` | المتابعة / التحكّم / الحذف |
+| `GET` `PUT` | `/api/runs/<rid>/attempts/<aid>` | ورقة الطالب / حفظ التصحيح اليدوي |
+| `POST` | `/api/runs/<rid>/sync` | إعادة ترحيل درجات التشغيل إلى سجل الدرجات |
 
-grades = session.get('http://localhost:5000/api/statistics')
-print(grades.json())
+```jsonc
+// POST /api/tools/<tid>/runs
+{"section_id": 3,
+ "start_at": "2026-11-05T08:00:00Z",   // اتركه فارغًا ليبدأ الآن
+ "end_at":   "2026-11-05T08:45:00Z",
+ "duration_min": 30,            // مهلة شخصية لكل طالب، تبدأ من دخوله
+ "absentees_only": false,       // تشغيل لاحق لمن لم يسلّم
+ "allowed_students": [12, 13],  // أو افتحه لطلبة محدّدين فقط
+ "shuffle": true, "show_score": true}
+
+// PUT /api/runs/<rid>
+{"action": "start_now" | "close" | "reopen" | "extend", "minutes": 10}
+// أو بلا action: تعديل start_at / end_at / duration_min / shuffle /
+//                show_score / allowed_students (قائمة فارغة = الشعبة كاملة)
+```
+
+`phase` في الرد محسوبة من الساعة لا مخزّنة:
+`scheduled` (لم يبدأ) · `open` · `ended` (انتهى وقته) · `closed` (أغلقه المعلّم).
+
+```jsonc
+// GET /api/runs/<rid> — لوحة المتابعة
+{"phase": "open", "eligible": 28, "submitted": 19, "in_progress": 3,
+ "avg_percent": 74.2, "restricted": false, "total_points": 20, "max_score": 10,
+ "roster": [{"student_id": 12, "name": "محمد علي", "code": "20231045",
+             "status": "submitted" | "in_progress" | "absent",
+             "score": 8.5, "percentage": 85, "needs_review": false,
+             "attempt_id": 41, "submitted_at": "2026-11-05T08:31:00Z"}],
+ "absent": [/* صفوف الغائبين من نفس القائمة */]}
+```
+
+**التحويل إلى الدرجة الرسمية:** نقاط الأسئلة تُقاس على `tool.max_score`.
+ورقة مجموعها 12 نقطة لأداة درجتها 10: من يحصل على 9 نقاط تُسجَّل له `9 ÷ 12 × 10 = 7.5`.
+
+---
+
+## الطالب
+
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `POST` | `/api/student/login` | `{"code": "20231045"}` — الرقم وحده |
+| `POST` | `/api/student/logout` | خروج |
+| `GET` | `/api/student/me` | بياناته والاختبارات المتاحة له |
+| `GET` | `/api/student/results` | درجاته هو في كل أدوات صفّه |
+| `GET` `POST` | `/api/student/runs/<rid>` | ورقة الأسئلة / بدء المحاولة |
+| `POST` | `/api/student/runs/<rid>/save` | حفظ تلقائي أثناء الحل |
+| `POST` | `/api/student/runs/<rid>/submit` | التسليم والتصحيح |
+
+`GET /api/student/runs/<rid>` لا يُرجع الإجابات الصحيحة إطلاقًا.
+والطالب يرى درجاته هو فقط — لا درجات زملائه ولا أي متوسطات.
+
+```jsonc
+// GET /api/student/me
+{"student": {"name": "محمد علي", "code": "20231045",
+             "grade": "الصف السابع", "section": "شعبة 1"},
+ "exams": [{"run_id": 7, "tool": "اختبار قصير 1", "questions": 12,
+            "max_score": 10, "duration_min": 30,
+            "phase": "open", "deadline": "2026-11-05T08:45:00Z",
+            "attempt_status": null, "can_enter": true}]}
 ```
 
 ---
 
-## 📱 Frontend Integration
+## التحليلات (تجميعية — بلا أسماء)
 
-### JavaScript Example
-```javascript
-// Login
-fetch('/login', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-  body: 'username=admin&password=admin'
-})
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` | `/api/overview` | المؤشرات العامة |
+| `GET` | `/api/tools` | أداء كل أداة قياس |
+| `GET` | `/api/grades-progress` | تقدّم الرصد لكل صف |
+| `GET` | `/api/analytics` | توزيع المستويات والاتجاهات |
+| `GET` | `/api/calendar` | التقويم الدراسي والإجازات وفترة الامتحانات |
 
-// Get statistics
-fetch('/api/statistics')
-  .then(r => r.json())
-  .then(data => console.log(data.average_score))
+هذه النقاط **لا تُرجع أي اسم طالب** مهما كانت البيانات المرصودة.
 
-// Record grade
-fetch('/api/students/1/grades', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({
-    test_name: 'Test 1',
-    score: 85,
-    max_score: 100,
-    notes: 'Good performance'
-  })
-})
-  .then(r => r.json())
-  .then(data => console.log('Grade recorded:', data.percentage))
-```
+## الدروس
+
+| الطريقة | المسار | الوظيفة |
+|---|---|---|
+| `GET` `POST` | `/api/grades/<gid>/lessons` | دروس الصف / إضافة درس |
+| `PUT` `DELETE` | `/api/lessons/<lid>` | تحديث الحالة (`planned`/`taught`/`postponed`) / حذف |
 
 ---
 
-## ⚡ Rate Limiting
+## الأخطاء
 
-No rate limiting on development. In production:
-- 100 requests per minute per IP
-- Grade recording: 1000 per minute
+| الرمز | المعنى |
+|---|---|
+| `400` | طلب ناقص أو غير صالح |
+| `401` | لا جلسة طالب |
+| `403` | المورد ليس لهذا المعلّم، أو الطالب غير مخوّل لهذا التشغيل |
+| `404` | غير موجود، أو رقم طالب غير صحيح |
+| `409` | تعارض — رقم مستخدم، أو تسليم مكرّر |
+| `413` | الملف المرفوع أكبر من `MAX_UPLOAD_MB` |
+| `423` | الاختبار مُقفل: لم يبدأ بعد أو أُغلق |
+| `207` | حُفظ بعض الطلب ورُفض بعضه (درجات خارج النطاق) |
 
----
+كل خطأ يرد بالشكل `{"error": "رسالة بالعربية"}`.
 
-## 🔒 Security Notes
+## ملاحظات
 
-- All endpoints check user authentication
-- User data is isolated by `user_id`
-- Passwords hashed with Werkzeug
-- SQL injection protected by SQLAlchemy ORM
-- HTTPS should be used in production
-
----
-
-## 📞 API Support
-
-For API issues:
-1. Check error response message
-2. Verify required fields are present
-3. Check authorization (logged in?)
-4. Check data types match schema
-5. Review examples in this document
-
----
-
-**API Version:** 3.0  
-**Last Updated:** 2026-10-06  
-**Status:** ✅ Complete
+* كل الأوقات في الـ API بتوقيت **UTC** بصيغة ISO-8601 بلاحقة `Z`.
+  الواجهة تحوّلها إلى التوقيت المحلي للمتصفح وبالعكس.
+* الرفع محدود بـ `MAX_UPLOAD_MB` (افتراضيًا 8) و300 اسم و200 سؤال في المرة.
+* نقاط الرفع كلها تقبل `commit=0` للمعاينة: تُحلّل الملف وتُرجع ما ستفعله
+  **دون أن تكتب شيئًا**، و`commit=1` للحفظ.

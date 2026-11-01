@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تقييم الطلبة — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr-shell.css') }}">
+<style>
+.gtable td,.gtable th{padding:7px 10px}
+.gtable tr.marked{background:#FBFEFD}
+.gtable input[type=number]{height:36px;width:92px;font-weight:600}
+.gtable input.over{border-color:#B42318;box-shadow:0 0 0 3px rgba(180,35,24,.1)}
+.gtable .nm{font-weight:600}
+.gtable .ck{width:34px}
+.gtable input[type=checkbox]{width:auto;height:auto;margin:0;cursor:pointer}
+.band{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.band.a{background:#E2F5F2;color:#0C7266}
+.band.b{background:#EEF2FF;color:#2D5BFF}
+.band.c{background:#F3EEFF;color:#5B3FC4}
+.band.d{background:#FFF6E6;color:#A8681B}
+.bulk{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#F8FAFF;border:1px solid #E1E8FF;border-radius:12px;padding:12px 15px;margin-bottom:14px}
+.bulk input[type=number]{width:104px;height:38px}
+.bulk .spacer{margin-inline-start:auto}
+.savebar{position:sticky;bottom:0;background:#fff;border-top:1px solid #E6E8EE;padding:14px 0 2px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px}
+.note{font-size:12.5px;color:#8A5B11;background:#FFF9EC;border:1px solid #F3E4C4;border-radius:10px;padding:10px 14px;line-height:1.8;margin-bottom:14px}
+.note a{color:#2D5BFF;font-weight:600}
+</style>
+</head>
+<body>
+{{ ui.loader() }}
+<div class="app">
+  {{ ui.sidenav('grading', username, school) }}
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">قيّم كل طالب باسمه — ودرجات الاختبارات الإلكترونية تصل هنا تلقائيًا</div><h1>تقييم الطلبة</h1></div>
+      <div class="spacer"></div>
+      <span class="toast" id="toast"></span>
+    </header>
+
+    <div class="body">
+      <div id="noGrades" class="card" style="display:none;text-align:center;padding:40px">
+        <div style="font-weight:600;font-size:16px;margin-bottom:6px">لا توجد صفوف بعد</div>
+        <p class="muted" style="margin-bottom:18px">هيّئ صفوفك وشُعبك، وسجّل الطلبة، ثم عُد لهنا.</p>
+        <a class="btn" style="display:inline-flex" href="{{ url_for('setup_page') }}">إعداد الصفوف</a>
+      </div>
+
+      <div id="wrap" style="display:none;flex-direction:column;gap:20px">
+        <div class="card">
+          <div class="hd"><h3>اختر الأداة</h3></div>
+          <div class="pickers" style="margin-top:14px">
+            <div><label>الصف</label><select id="grade" onchange="onGrade()"></select></div>
+            <div><label>الشعبة</label><select id="section" onchange="load()"></select></div>
+            <div><label>أداة القياس</label><select id="tool" onchange="load()"></select></div>
+            <div><label>تاريخ التطبيق</label><input type="date" id="applied"></div>
+          </div>
+        </div>
+
+        <div class="card" id="noStudents" style="display:none;text-align:center;padding:36px">
+          <div style="font-weight:600;font-size:15px;margin-bottom:6px">لا طلبة في هذه الشعبة</div>
+          <p class="muted" style="margin-bottom:16px">سجّل طلبة الشعبة أولًا لتقييمهم بأسمائهم.</p>
+          <a class="btn" style="display:inline-flex" href="{{ url_for('students_page') }}">تسجيل الطلبة</a>
+        </div>
+
+        <div class="card" id="upCard" style="display:none">
+          <div class="hd"><h3>رفع الدرجات من ملف</h3><div class="spacer"></div>
+            <a class="btn ghost sm" id="scTpl" href="#">تحميل كشف الدرجات</a></div>
+          <p class="lead">القالب ينزل مُعبّأً بأسماء الشعبة وأرقامها — اكتب الدرجات وارفعه.
+            تُطابَق كل درجة بصاحبها عبر <b>رقم الطالب</b> (أو الاسم إن لم يوجد رقم)، وتُعرض لك المطابقة قبل الحفظ.</p>
+          <div class="drop" id="scDrop" onclick="document.getElementById('scFile').click()">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5-5 5 5M12 5v13"/></svg></div>
+            <div class="t">اسحب كشف الدرجات هنا أو اضغط للاختيار</div>
+            <div class="s">Excel ‏(.xlsx) أو CSV — عمود رقم الطالب وعمود الدرجة</div>
+          </div>
+          <input type="file" id="scFile" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="scPick(this.files[0])">
+          <div id="scPrev"></div>
+        </div>
+
+        <div class="card" id="main" style="display:none">
+          <div class="hd">
+            <h3 id="title">—</h3><div class="spacer"></div>
+            <span class="pill" id="progress">0 / 0</span>
+            <span class="pill warn" id="avg" style="display:none"></span>
+          </div>
+          <p class="lead" id="lead"></p>
+          <div id="notes"></div>
+
+          <div class="bulk" id="bulk">
+            <label style="margin:0">تحديد الكل وإعطاء درجة موحّدة</label>
+            <input type="number" id="bulkVal" min="0" step="0.25" placeholder="الدرجة">
+            <button class="btn sm" onclick="applyAll()">طبّق على المحدّدين</button>
+            <button class="btn ghost sm" onclick="toggleAll(true)">تحديد الكل</button>
+            <button class="btn ghost sm" onclick="toggleAll(false)">إلغاء التحديد</button>
+            <div class="spacer"></div>
+            <span class="muted" id="selCount">0 محدّد</span>
+          </div>
+
+          <div style="overflow:auto"><table class="gtable" id="tbl"></table></div>
+
+          <div class="savebar">
+            <button class="btn" id="saveBtn" onclick="save()">حفظ الدرجات</button>
+            <button class="btn ghost" onclick="load()">تراجع عن التعديلات</button>
+            <span class="muted" id="dirty"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const el=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let STRUCTURE=[],DATA=null,MAX=100;
+
+function toast(m,ok=true){const t=el('toast');t.className='toast '+(ok?'ok':'err');t.textContent=m;setTimeout(()=>t.className='toast',4200);}
+function bandClass(b){return {'متقدّم':'a','متمكّن':'b','قيد التطوّر':'c','مبتدئ':'d'}[b]||'d';}
+
+function onGrade(){
+  const g=STRUCTURE.find(x=>String(x.id)===el('grade').value);
+  el('section').innerHTML=(g&&g.sections||[]).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('')||'<option value="">— لا شُعب —</option>';
+  el('tool').innerHTML=(g&&g.tools||[]).map(t=>`<option value="${t.id}">${esc(t.name)} — ${t.max_score} درجة</option>`).join('')||'<option value="">— لا أدوات —</option>';
+  load();
+}
+
+async function load(){
+  const sid=el('section').value,tid=el('tool').value;
+  if(!sid||!tid){el('main').style.display='none';return;}
+  const d=await fetch(`/api/sections/${sid}/tools/${tid}/roster-scores`).then(r=>r.json());
+  if(d.error){toast(d.error,false);el('main').style.display='none';return;}
+  DATA=d;MAX=d.tool.max_score;
+  const has=d.students.length;
+  el('noStudents').style.display=has?'none':'block';
+  el('main').style.display=has?'block':'none';
+  el('upCard').style.display=has?'block':'none';
+  el('scTpl').href=`/api/sections/${sid}/tools/${tid}/scores-template.xlsx`;
+  if(!has)return;
+
+  el('title').textContent=`${d.tool.name} — ${d.section.name}`;
+  el('progress').textContent=`${d.marked} / ${d.total} مُقيَّم`;
+  el('avg').style.display=d.average!=null?'inline-flex':'none';
+  if(d.average!=null)el('avg').textContent=`المتوسط ${d.average}%`;
+  el('applied').value=d.tool.applied_date||'';
+  el('lead').innerHTML=`${esc(d.tool.kind||'')}${d.tool.lesson?` · ${esc(d.tool.lesson)}`:''}`
+    +` · الدرجة من <b>${MAX}</b>. اترك الحقل فارغًا لمن لم يُقيَّم بعد.`;
+
+  const notes=[];
+  if(d.tool.is_exam)notes.push(`هذه الأداة اختبار إلكتروني (${d.tool.questions} سؤالًا). الطلبة يحلّونه بأنفسهم وتصل الدرجات هنا تلقائيًا — `
+    +`<a href="/exams">افتح صفحة الاختبارات</a> لمراجعة الأوراق. أي تعديل هنا يَجُبّ الدرجة الآلية.`);
+  if(d.anonymous_scores)notes.push(`في هذه الأداة <b>${d.anonymous_scores}</b> درجة مُدخلة سابقًا بلا اسم (من اللصق أو استيراد Excel). `
+    +`تبقى كما هي في التحليلات، ولا تظهر في هذا الجدول.`);
+  el('notes').innerHTML=notes.map(n=>`<div class="note">${n}</div>`).join('');
+  // Activities and projects are the case for one mark across the class.
+  el('bulk').style.display=d.tool.is_exam?'none':'flex';
+
+  el('tbl').innerHTML=`<thead><tr>
+      <th class="ck"><input type="checkbox" onchange="toggleAll(this.checked)" id="ckAll"></th>
+      <th>#</th><th>الطالب</th><th>الرمز</th><th>الدرجة (من ${MAX})</th><th>النسبة</th><th>المستوى</th><th>المصدر</th>
+    </tr></thead><tbody>`
+    +d.students.map(s=>`<tr data-id="${s.id}" class="${s.score!=null?'marked':''}">
+      <td class="ck"><input type="checkbox" class="sel" onchange="count()"></td>
+      <td class="muted">${s.seat_no??''}</td>
+      <td class="nm">${esc(s.name)}${s.active?'':' <span class="pill">موقوف</span>'}</td>
+      <td><span class="code">${esc(s.code)}</span></td>
+      <td><input type="number" class="sc" min="0" max="${MAX}" step="0.25"
+           value="${s.score??''}" oninput="onEdit(this)" onchange="onEdit(this)"></td>
+      <td class="pc muted">${s.percentage!=null?s.percentage+'%':'—'}</td>
+      <td class="bd">${s.band?`<span class="band ${bandClass(s.band)}">${s.band}</span>`:'—'}</td>
+      <td>${s.source==='exam'
+            ?`<span class="pill open">اختبار</span>${s.needs_review?' <span class="pill warn">تصحيح</span>':''}`
+            :s.source?'<span class="pill">المعلّم</span>':'<span class="muted">—</span>'}</td>
+    </tr>`).join('')+'</tbody>';
+  count();dirty(0);
+}
+
+function onEdit(input){
+  const v=input.value;
+  const bad=v!==''&&(isNaN(+v)||+v<0||+v>MAX);
+  input.classList.toggle('over',bad);
+  const tr=input.closest('tr');
+  const pc=(v===''||bad)?null:Math.round((+v/MAX)*1000)/10;
+  tr.querySelector('.pc').textContent=pc!=null?pc+'%':'—';
+  const b=pc==null?null:(pc>=85?'متقدّم':pc>=70?'متمكّن':pc>=55?'قيد التطوّر':'مبتدئ');
+  tr.querySelector('.bd').innerHTML=b?`<span class="band ${bandClass(b)}">${b}</span>`:'—';
+  tr.classList.toggle('marked',v!==''&&!bad);
+  dirty();
+}
+function dirty(force){
+  if(force===0){el('dirty').textContent='';el('saveBtn').disabled=false;return;}
+  const n=changed().length;
+  el('dirty').textContent=n?`${n} تعديلًا غير محفوظ`:'';
+}
+function changed(){
+  if(!DATA)return [];
+  const byId={};DATA.students.forEach(s=>byId[s.id]=s);
+  return [...document.querySelectorAll('#tbl tbody tr')].filter(tr=>{
+    const cur=tr.querySelector('.sc').value.trim();
+    const was=byId[tr.dataset.id].score;
+    return cur!==(was==null?'':String(was));
+  });
+}
+function toggleAll(on){
+  document.querySelectorAll('#tbl .sel').forEach(c=>c.checked=on);
+  const a=el('ckAll');if(a)a.checked=on;
+  count();
+}
+function count(){
+  const n=document.querySelectorAll('#tbl .sel:checked').length;
+  el('selCount').textContent=`${n} محدّد`;
+}
+function applyAll(){
+  const v=el('bulkVal').value.trim();
+  if(v===''){toast('اكتب الدرجة أولًا',false);return;}
+  if(isNaN(+v)||+v<0||+v>MAX){toast(`الدرجة يجب أن تكون بين 0 و ${MAX}`,false);return;}
+  const rows=[...document.querySelectorAll('#tbl tbody tr')].filter(tr=>tr.querySelector('.sel').checked);
+  if(!rows.length){toast('حدّد الطلبة أولًا',false);return;}
+  rows.forEach(tr=>{const i=tr.querySelector('.sc');i.value=v;onEdit(i);});
+  toast(`طُبّقت ${v} على ${rows.length} طالبًا — اضغط «حفظ الدرجات»`);
+}
+
+/* ── marks upload ── */
+let SCFILE=null;
+const scDrop=el('scDrop');
+['dragenter','dragover'].forEach(e=>scDrop.addEventListener(e,ev=>{ev.preventDefault();scDrop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>scDrop.addEventListener(e,ev=>{ev.preventDefault();scDrop.classList.remove('over');}));
+scDrop.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)scPick(f);});
+
+async function scPick(f){
+  if(!f)return;
+  if(!/\.(xlsx|xlsm|csv)$/i.test(f.name)){toast('الملف يجب أن يكون Excel أو CSV',false);return;}
+  SCFILE=f;scDrop.classList.add('busy');
+  const d=await scSend(0);
+  scDrop.classList.remove('busy');
+  if(d)scShow(d,f.name);
+}
+async function scSend(commit){
+  const fd=new FormData();
+  fd.append('file',SCFILE);fd.append('commit',String(commit));
+  if(el('applied').value)fd.append('applied_date',el('applied').value);
+  const r=await fetch(`/api/sections/${el('section').value}/tools/${el('tool').value}/scores/import`,
+    {method:'POST',body:fd});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast(d.error||'تعذّرت قراءة الملف',false);el('scPrev').innerHTML='';return null;}
+  return d;
+}
+function scCancel(){SCFILE=null;el('scFile').value='';el('scPrev').innerHTML='';}
+function scShow(d,fname){
+  if(!d.matched){
+    el('scPrev').innerHTML=`<div class="prev">
+      <div class="ph"><span class="pill warn">لا مطابقات</span><div class="spacer"></div>
+        <button class="btn ghost sm" onclick="scCancel()">إغلاق</button></div>
+      <div class="warn">لم تُطابَق أي درجة بطالب في <b>${esc(fname)}</b>.
+        تأكد أن الملف يحوي عمود «رقم الطالب» — أو حمّل كشف الدرجات الجاهز.</div></div>`;
+    return;
+  }
+  const warn=[];
+  if(d.unmatched_count)warn.push(`<b>${d.unmatched_count}</b> صفًا لم يُطابَق أي طالب:<br>`
+    +d.unmatched.slice(0,5).map(u=>`صف ${u.row}: ${esc(u.number||u.name||'—')}`).join('<br>'));
+  if(d.out_of_range_count)warn.push(`<b>${d.out_of_range_count}</b> درجة خارج النطاق (0–${d.tool.max_score}) لن تُحفظ:<br>`
+    +d.out_of_range.slice(0,5).map(u=>`${esc(u.name)}: ${esc(String(u.value))}`).join('<br>'));
+  if(d.blank)warn.push(`<b>${d.blank}</b> خلية فارغة — تُركت كما هي (غير مُقيَّم)`);
+  el('scPrev').innerHTML=`
+    <div class="prev">
+      <div class="ph">
+        <span class="pill open">${d.matched} درجة مطابَقة</span>
+        <span class="muted">من ${d.roster} في الكشف · المطابقة بـ «${esc(d.matched_by)}»${d.sheet?` · ورقة «${esc(d.sheet)}»`:''}</span>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="scCancel()">إلغاء</button>
+        <button class="btn sm" onclick="scSave()">حفظ ${d.matched} درجة</button>
+      </div>
+      <div class="pb"><table><tbody>${d.preview.map(p=>
+        `<tr><td style="width:96px"><span class="code">${esc(p.number)}</span></td>
+             <td>${esc(p.name)}</td>
+             <td style="width:90px;font-weight:600">${p.score} / ${d.tool.max_score}</td></tr>`).join('')}
+        ${d.matched>d.preview.length?`<tr><td></td><td class="muted">… و${d.matched-d.preview.length} درجة أخرى</td></tr>`:''}
+      </tbody></table></div>
+      ${warn.length?`<div class="warn">${warn.join('<br>')}</div>`:''}
+    </div>`;
+}
+async function scSave(){
+  scDrop.classList.add('busy');
+  const d=await scSend(1);
+  scDrop.classList.remove('busy');
+  if(!d)return;
+  scCancel();await load();
+  toast(`حُفظت ${d.saved} درجة`);
+}
+
+async function save(){
+  const sid=el('section').value,tid=el('tool').value;
+  const rows=changed();
+  if(!rows.length){toast('لا تعديلات للحفظ',false);return;}
+  if([...document.querySelectorAll('#tbl .sc')].some(i=>i.classList.contains('over'))){
+    toast(`هناك درجات خارج النطاق (0–${MAX})`,false);return;
+  }
+  const scores={};
+  rows.forEach(tr=>{scores[tr.dataset.id]=tr.querySelector('.sc').value.trim();});
+  el('saveBtn').disabled=true;
+  const r=await fetch(`/api/sections/${sid}/tools/${tid}/roster-scores`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({scores,applied_date:el('applied').value||null})});
+  const d=await r.json().catch(()=>({}));
+  el('saveBtn').disabled=false;
+  if(!r.ok&&r.status!==207){toast(d.error||'تعذّر الحفظ',false);return;}
+  await load();
+  toast(d.error?d.error:`حُفظت ${d.saved||rows.length} درجة`,!d.error);
+}
+window.addEventListener('beforeunload',e=>{if(changed().length){e.preventDefault();e.returnValue='';}});
+
+async function init(){
+  try{const r=await fetch('/api/structure');STRUCTURE=r.ok?await r.json():[];}catch(e){STRUCTURE=[];}
+  if(!Array.isArray(STRUCTURE))STRUCTURE=[];
+  const has=STRUCTURE.some(g=>(g.sections||[]).length&&(g.tools||[]).length);
+  el('noGrades').style.display=has?'none':'block';
+  el('wrap').style.display=has?'flex':'none';
+  if(!has)return;
+  el('grade').innerHTML=STRUCTURE.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  onGrade();
+}
+window.__mnrManualLoader=true;
+init().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+</script>
+</body>
+</html>

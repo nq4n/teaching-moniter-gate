@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>اختباراتي — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;background:#F4F5F8;color:#15171E;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.bar{background:#15171E;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.bar .name{font-weight:700;font-size:16px}
+.bar .who{margin-inline-start:auto;font-size:12.5px;color:#AEB5C2;text-align:end}
+.bar .who b{color:#fff;display:block;font-size:13.5px}
+.bar button{background:#262A36;color:#C7CCD6;border:none;border-radius:9px;height:34px;padding:0 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.page{max-width:740px;margin:0 auto;padding:22px 16px 60px;display:flex;flex-direction:column;gap:16px}
+.card{background:#fff;border:1px solid #E6E8EE;border-radius:16px;padding:22px}
+h2{font-size:19px;font-weight:700;margin-bottom:5px}
+.lead{font-size:13.5px;color:#646D7E;line-height:1.8;margin-bottom:16px}
+label{display:block;font-size:12.5px;font-weight:600;color:#3A4150;margin-bottom:6px}
+input,textarea{font:inherit;width:100%;border:1px solid #E6E8EE;border-radius:10px;height:46px;padding:0 13px;font-size:15px;background:#fff}
+textarea{height:auto;padding:11px 13px;line-height:1.8;resize:vertical}
+input:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3px rgba(45,91,255,.12)}
+#code{direction:ltr;text-align:center;font-size:26px;letter-spacing:.34em;font-weight:700;height:60px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:46px;padding:0 20px;border-radius:11px;background:#2D5BFF;color:#fff;font:inherit;font-size:15px;font-weight:600;border:none;cursor:pointer;width:100%}
+.btn:hover{background:#2348cf}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:#fff;color:#3A4150;border:1px solid #E6E8EE}
+.btn.go{background:#0F9488}.btn.go:hover{background:#0C7266}
+.btn.auto{width:auto}
+.err{background:#FBECEC;color:#B42318;border-radius:10px;padding:10px 14px;font-size:13.5px;font-weight:600;margin-bottom:14px;display:none}
+.err.on{display:block}
+.pill{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;background:#EEF2FF;color:#2D5BFF;white-space:nowrap}
+.pill.open{background:#E2F5F2;color:#0C7266}.pill.closed{background:#F1F2F6;color:#646D7E}
+.pill.warn{background:#FFF6E6;color:#A8681B}
+.ex{border:1px solid #E6E8EE;border-radius:13px;padding:15px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.ex.live{border-color:#BFE8E0;background:#F3FBF9}
+.ex .info{flex:1;min-width:150px}
+.ex .t{font-weight:600;font-size:14.5px}
+.ex .u{font-size:12px;color:#8A93A3;margin-top:3px;line-height:1.7}
+.q{border:1px solid #E6E8EE;border-radius:13px;padding:17px 18px;margin-bottom:12px}
+.q .qt{font-weight:600;font-size:15px;line-height:1.8;margin-bottom:13px}
+.q .qt .n{color:#2D5BFF}
+.opt{display:flex;align-items:center;gap:11px;border:1px solid #E6E8EE;border-radius:11px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-size:14.5px}
+.opt:hover{background:#FBFCFE}
+.opt.sel{border-color:#2D5BFF;background:#F5F8FF;font-weight:600}
+.opt input{width:auto;height:auto;margin:0;flex:0 0 auto}
+.timer{position:sticky;top:0;z-index:20;background:#15171E;color:#fff;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;font-size:14px;flex-wrap:wrap;margin-bottom:14px}
+.timer .left{margin-inline-start:auto;font-weight:700;font-size:19px;font-variant-numeric:tabular-nums;direction:ltr}
+.timer.low{background:#B42318}
+.result{text-align:center;padding:14px 0}
+.result .big{font-size:46px;font-weight:700;line-height:1.1}
+.result .band{font-size:15px;font-weight:600;color:#0C7266;margin-top:7px}
+.save{font-size:12px;color:#8A93A3}
+.tabs2{display:flex;background:#fff;border:1px solid #E6E8EE;border-radius:12px;overflow:hidden;margin-bottom:14px}
+.tabs2 button{flex:1;height:44px;border:none;background:#fff;font:inherit;font-size:14px;font-weight:600;color:#646D7E;cursor:pointer;border-inline-start:1px solid #E6E8EE}
+.tabs2 button:first-child{border-inline-start:none}
+.tabs2 button.on{background:#2D5BFF;color:#fff}
+.sum{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:16px}
+.sum .b{border:1px solid #E6E8EE;border-radius:12px;padding:13px 10px;text-align:center;background:#FBFCFE}
+.sum .v{font-size:21px;font-weight:700;line-height:1.2}
+.sum .k{font-size:11px;color:#6B7486;margin-top:3px}
+.rrow{display:flex;align-items:center;gap:11px;padding:13px 14px;border:1px solid #E6E8EE;border-radius:12px;margin-bottom:9px;flex-wrap:wrap}
+.rrow.none{opacity:.6;border-style:dashed}
+.rrow .i{flex:1;min-width:140px}
+.rrow .t{font-weight:600;font-size:14px}
+.rrow .u{font-size:11.5px;color:#8A93A3;margin-top:3px}
+.rrow .sc{font-weight:700;font-size:16px;white-space:nowrap}
+.bd{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.bd.a{background:#E2F5F2;color:#0C7266}.bd.b{background:#EEF2FF;color:#2D5BFF}
+.bd.c{background:#F3EEFF;color:#5B3FC4}.bd.d{background:#FFF6E6;color:#A8681B}
+</style>
+</head>
+<body>
+<div class="bar">
+  <span>{{ ui.beacon(19) }}</span>
+  <span class="name">المنارة</span>
+  <span class="who" id="who" style="display:none"></span>
+  <button id="out" onclick="logout()" style="display:none">خروج</button>
+</div>
+
+<div class="page">
+  <!-- 1 — code login -->
+  <div class="card" id="vLogin" style="display:none">
+    <h2>اختباراتي</h2>
+    <p class="lead">أدخل <b>رقم الطالب</b> الخاص بك. لا تحتاج اسم مستخدم ولا كلمة مرور.</p>
+    <div class="err" id="loginErr"></div>
+    <label for="code">رقم الطالب</label>
+    <input id="code" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="000000"
+           onkeydown="if(event.key==='Enter')login()">
+    <button class="btn" style="margin-top:14px" onclick="login()">دخول</button>
+  </div>
+
+  <!-- 2 — exam list -->
+  <div id="vList" style="display:none">
+    <div class="tabs2" id="tabs">
+      <button id="tbE" class="on" onclick="tab('e')">اختباراتي</button>
+      <button id="tbR" onclick="tab('r')">نتائجي</button>
+    </div>
+    <div class="card" id="paneE">
+      <h2>اختباراتي</h2>
+      <p class="lead" id="listLead"></p>
+      <div class="err" id="listErr"></div>
+      <div id="exams"></div>
+      <div class="lead" id="listEmpty" style="display:none;text-align:center;padding:22px 0">
+        لا توجد اختبارات متاحة لك الآن. عُد عند الوقت الذي حدّده معلّمك.
+      </div>
+      <button class="btn ghost" style="margin-top:6px" onclick="refresh()">تحديث</button>
+    </div>
+
+    <div class="card" id="paneR" style="display:none">
+      <h2>نتائجي</h2>
+      <p class="lead">كل ما صحّحه معلّمك حتى الآن — من الاختبارات الإلكترونية ومن الأوراق التي قيّمها بنفسه.</p>
+      <div id="summary"></div>
+      <div id="results"></div>
+      <div class="lead" id="resEmpty" style="display:none;text-align:center;padding:22px 0">
+        لم تُرصد لك درجات بعد.
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 — sitting the exam -->
+  <div id="vExam" style="display:none">
+    <div class="timer" id="timer">
+      <span id="examName"></span>
+      <span class="save" id="saveNote"></span>
+      <span class="left" id="left">--:--</span>
+    </div>
+    <div class="card">
+      <div class="err" id="examErr"></div>
+      <div id="questions"></div>
+      <button class="btn go" onclick="submitExam(false)" id="submitBtn">تسليم الاختبار</button>
+      <p class="lead" style="text-align:center;margin:12px 0 0">تُحفظ إجاباتك تلقائيًا أثناء الحل.</p>
+    </div>
+  </div>
+
+  <!-- 4 — result -->
+  <div id="vDone" style="display:none">
+    <div class="card">
+      <div class="result" id="result"></div>
+      <button class="btn ghost" style="margin-top:14px" onclick="refresh()">رجوع لاختباراتي</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const el=id=>document.getElementById(id);
+const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let PAPER=null,ANSWERS={},DEADLINE=null,TICK=null,SAVER=null,SUBMITTING=false;
+
+function show(v){['vLogin','vList','vExam','vDone'].forEach(x=>el(x).style.display=x===v?(x==='vLogin'?'block':'block'):'none');}
+function err(id,m){const e=el(id);if(!m){e.className='err';e.textContent='';return;}e.className='err on';e.textContent=m;}
+function fmtDt(iso){if(!iso)return'';return new Date(iso).toLocaleString('ar',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
+
+async function login(){
+  const code=el('code').value.trim();
+  if(!code){err('loginErr','أدخل رقمك');return;}
+  err('loginErr','');
+  const r=await jreq('/api/student/login',{code});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){err('loginErr',d.error||'رقم غير صحيح');return;}
+  await refresh();
+}
+async function logout(){await jreq('/api/student/logout');location.reload();}
+
+function tab(v){
+  el('paneE').style.display=v==='e'?'block':'none';
+  el('paneR').style.display=v==='r'?'block':'none';
+  el('tbE').className=v==='e'?'on':'';el('tbR').className=v==='r'?'on':'';
+  if(v==='r')loadResults();
+}
+const BD={'متقدّم':'a','متمكّن':'b','قيد التطوّر':'c','مبتدئ':'d'};
+async function loadResults(){
+  const r=await fetch('/api/student/results');
+  if(!r.ok)return;
+  const d=await r.json();
+  el('summary').innerHTML=`<div class="sum">
+    <div class="b"><div class="v">${d.average!=null?d.average+'%':'—'}</div><div class="k">متوسطك</div></div>
+    <div class="b"><div class="v">${d.earned} <span style="font-size:13px;color:#8A93A3">/ ${d.out_of}</span></div><div class="k">مجموع درجاتك</div></div>
+    <div class="b"><div class="v">${d.marked}<span style="font-size:13px;color:#8A93A3"> / ${d.total_tools}</span></div><div class="k">أداة مرصودة</div></div>
+  </div>`+(d.band?`<div style="text-align:center;margin:-6px 0 16px"><span class="bd ${BD[d.band]}" style="font-size:13px;padding:5px 14px">${esc(d.band)}</span></div>`:'');
+  const marked=d.results.filter(x=>x.score!=null);
+  el('resEmpty').style.display=marked.length?'none':'block';
+  el('results').innerHTML=d.results.map(x=>x.score==null
+    ? `<div class="rrow none"><div class="i"><div class="t">${esc(x.tool)}</div>
+         <div class="u">${esc(x.kind||'')} · من ${x.max_score} درجة</div></div>
+         <span class="muted" style="font-size:12.5px">لم تُرصد بعد</span></div>`
+    : `<div class="rrow"><div class="i"><div class="t">${esc(x.tool)}</div>
+         <div class="u">${esc(x.kind||'')}${x.lesson?' · '+esc(x.lesson):''}${x.date?' · '+x.date:''}</div></div>
+         <span class="sc">${x.score} <span style="font-size:12.5px;color:#8A93A3">/ ${x.max_score}</span></span>
+         <span class="bd ${BD[x.band]||'d'}">${esc(x.band)} · ${x.percentage}%</span></div>`).join('');
+}
+
+async function refresh(){
+  stopClock();
+  const r=await fetch('/api/student/me');
+  if(r.status===401){el('who').style.display='none';el('out').style.display='none';show('vLogin');el('code').focus();return;}
+  const d=await r.json();
+  el('who').style.display='block';el('out').style.display='inline-flex';
+  el('who').innerHTML=`<b>${esc(d.student.name)}</b>${esc(d.student.grade)} · ${esc(d.student.section)} · <span class="ltr">${esc(d.student.code)}</span>`;
+  el('listLead').innerHTML=`الاختبارات التي شغّلها معلّمك لشعبتك. الاختبار يُفتح في وقته المحدّد ويُغلق تلقائيًا.`;
+  const ex=d.exams||[];
+  el('listEmpty').style.display=ex.length?'none':'block';
+  el('exams').innerHTML=ex.map(e=>{
+    let pill='',action='';
+    if(e.attempt_status==='submitted'){
+      pill=`<span class="pill closed">تم التسليم</span>`;
+      if(e.show_score&&e.score!=null)pill+=` <span class="pill open">${e.score} / ${e.max_score}</span>`;
+    }else if(e.phase==='open'){
+      pill=`<span class="pill open">مفتوح الآن</span>`;
+      action=`<button class="btn go auto" onclick="start(${e.run_id})">${e.attempt_status==='in_progress'?'متابعة':'ابدأ'}</button>`;
+    }else if(e.phase==='scheduled'){
+      pill=`<span class="pill">يبدأ ${fmtDt(e.start_at)}</span>`;
+    }else{
+      pill=`<span class="pill closed">مُغلق</span>`;
+    }
+    return `<div class="ex ${e.phase==='open'&&e.attempt_status!=='submitted'?'live':''}">
+      <div class="info">
+        <div class="t">${esc(e.tool)}${e.round_no>1?` <span class="pill warn">${esc(e.label||'')}</span>`:''}</div>
+        <div class="u">${e.lesson?esc(e.lesson)+'<br>':''}${e.questions} سؤال · من ${e.max_score} درجة${e.duration_min?` · ${e.duration_min} دقيقة`:''}${e.end_at?`<br>يُغلق ${fmtDt(e.end_at)}`:''}</div>
+      </div>${pill}${action}</div>`;
+  }).join('');
+  show('vList');
+  if(el('tbR').className==='on')loadResults();
+}
+
+async function start(rid){
+  err('examErr','');
+  const r=await jreq(`/api/student/runs/${rid}`,{});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){err('listErr',d.error||'تعذّر فتح الاختبار');setTimeout(()=>err('listErr',''),5000);return;}
+  PAPER=d;ANSWERS={};
+  (d.questions||[]).forEach(q=>{if(q.saved!=null)ANSWERS[q.id]=q.saved;});
+  el('examName').textContent=`${d.tool} — ${d.total_points} نقطة`;
+  el('questions').innerHTML=(d.questions||[]).map((q,i)=>render(q,i)).join('');
+  DEADLINE=d.deadline?new Date(d.deadline).getTime()-(new Date(d.now).getTime()-Date.now()):null;
+  show('vExam');startClock();
+  SAVER=setInterval(save,15000);
+  window.scrollTo(0,0);
+}
+
+function render(q,i){
+  const n=`<span class="n">${i+1}.</span> `;
+  const head=`<div class="qt">${n}${esc(q.text)} <span class="pill warn">${q.points}</span></div>`;
+  if(q.qtype==='mcq'){
+    return `<div class="q">${head}${q.options.map((o,j)=>`
+      <label class="opt ${String(ANSWERS[q.id])===String(j)?'sel':''}" onclick="pick(${q.id},${j},this)">
+        <input type="radio" name="q${q.id}" ${String(ANSWERS[q.id])===String(j)?'checked':''}> <span>${esc(o)}</span>
+      </label>`).join('')}</div>`;
+  }
+  if(q.qtype==='tf'){
+    return `<div class="q">${head}${[['true','صح'],['false','خطأ']].map(([v,l])=>`
+      <label class="opt ${String(ANSWERS[q.id])===v?'sel':''}" onclick="pick(${q.id},'${v}',this)">
+        <input type="radio" name="q${q.id}" ${String(ANSWERS[q.id])===v?'checked':''}> <span>${l}</span>
+      </label>`).join('')}</div>`;
+  }
+  return `<div class="q">${head}<textarea rows="3" placeholder="اكتب إجابتك…"
+    oninput="ANSWERS[${q.id}]=this.value">${esc(ANSWERS[q.id]||'')}</textarea></div>`;
+}
+function pick(qid,v,node){
+  ANSWERS[qid]=v;
+  node.parentNode.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
+  node.classList.add('sel');
+}
+
+async function save(){
+  if(!PAPER||SUBMITTING)return;
+  try{
+    const r=await jreq(`/api/student/runs/${PAPER.run_id}/save`,{answers:ANSWERS});
+    el('saveNote').textContent=r.ok?'حُفظت الإجابات':'';
+    setTimeout(()=>{el('saveNote').textContent='';},2500);
+  }catch(e){}
+}
+
+function startClock(){
+  stopClock();
+  if(!DEADLINE){el('left').textContent='';return;}
+  const paint=()=>{
+    const ms=DEADLINE-Date.now();
+    if(ms<=0){el('left').textContent='00:00';submitExam(true);return;}
+    const s=Math.floor(ms/1000);
+    el('left').textContent=`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+    el('timer').className='timer'+(s<=60?' low':'');
+  };
+  paint();TICK=setInterval(paint,1000);
+}
+function stopClock(){if(TICK)clearInterval(TICK);if(SAVER)clearInterval(SAVER);TICK=SAVER=null;}
+
+async function submitExam(auto){
+  if(!PAPER||SUBMITTING)return;
+  const total=(PAPER.questions||[]).length;
+  const done=(PAPER.questions||[]).filter(q=>ANSWERS[q.id]!=null&&ANSWERS[q.id]!=='').length;
+  if(!auto&&done<total&&!confirm(`أجبت عن ${done} من ${total} سؤالًا. هل تريد التسليم الآن؟`))return;
+  SUBMITTING=true;el('submitBtn').disabled=true;stopClock();
+  const r=await jreq(`/api/student/runs/${PAPER.run_id}/submit`,{answers:ANSWERS});
+  const d=await r.json().catch(()=>({}));
+  SUBMITTING=false;el('submitBtn').disabled=false;
+  if(!r.ok){err('examErr',d.error||'تعذّر التسليم — حاول مرة أخرى');return;}
+  if(d.score!=null){
+    el('result').innerHTML=`<div class="lead" style="margin:0">درجتك في ${esc(PAPER.tool)}</div>
+      <div class="big">${d.score} <span style="font-size:22px;color:#8A93A3">/ ${d.max_score}</span></div>
+      <div class="band">${esc(d.band)} · ${d.percentage}%</div>`;
+  }else{
+    el('result').innerHTML=`<div class="big" style="font-size:34px">تم التسليم ✓</div>
+      <div class="lead" style="margin:10px 0 0">${d.needs_review?'سيُصحّح معلّمك إجاباتك المكتوبة ثم تظهر درجتك.':'شكرًا — استلم معلّمك إجاباتك.'}</div>`;
+  }
+  PAPER=null;show('vDone');window.scrollTo(0,0);
+}
+window.addEventListener('beforeunload',e=>{if(PAPER&&!SUBMITTING){e.preventDefault();e.returnValue='';}});
+refresh();
+</script>
+</body>
+</html>
