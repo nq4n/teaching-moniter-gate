@@ -26,7 +26,7 @@
 <body>
 {{ ui.loader() }}
 <div class="app">
-  {{ ui.sidenav('students', username, school) }}
+  {{ ui.sidenav('students', username, school, current_user.is_admin) }}
   <div class="main">
     <header class="top">
       <div><div class="crumb">ارفع كشف الشعبة بأرقام الطلبة — أو الصق الأسماء وتُولَّد الأرقام تلقائيًا</div><h1>تسجيل الطلبة</h1></div>

@@ -140,18 +140,28 @@ ok(t.put(f"/api/runs/{r3['id']}", json={"action": "extend", "minutes": 5}), "ext
 assert t.get(f"/api/runs/{r3['id']}").get_json()["phase"] == "open"
 print(" start_now / close / extend ✓")
 
-section("re-sync after a manual replace wipes the tool's scores")
-ok(t.post(f"/api/sections/{sec['id']}/tools/{tool['id']}/scores",
-          json={"scores": "9 8 7", "replace": True}), "replace")
-assert ok(t.get(f"/api/sections/{sec['id']}/tools/{tool['id']}/scores"), "sc")["count"] == 3
+section("a section with a roster refuses anonymous pasting")
+c = t.post(f"/api/sections/{sec['id']}/tools/{tool['id']}/scores",
+           json={"scores": "9 8 7", "replace": True})
+assert c.status_code == 409, c.status_code
+assert c.get_json()["redirect"] == "/grading"
+assert ok(t.get(f"/api/sections/{sec['id']}/tools/{tool['id']}/scores"),
+          "untouched")["count"] == 3, "the guard must not have wiped anything"
+print(" 409 ·", c.get_json()["error"][:58], "…")
+
+section("re-sync rebuilds exam marks if the score rows are ever lost")
+with A.app.app_context():
+    A.ScoreEntry.query.filter_by(section_id=sec["id"], tool_id=tool["id"]).delete()
+    A.db.session.commit()
+assert ok(t.get(f"/api/sections/{sec['id']}/tools/{tool['id']}/scores"), "gone")["count"] == 0
 n1 = ok(t.post(f"/api/runs/{run['id']}/sync", json={}), "sync")["synced"]
 n2 = ok(t.post(f"/api/runs/{r2['id']}/sync", json={}), "sync2")["synced"]
 back = ok(t.get(f"/api/sections/{sec['id']}/tools/{tool['id']}/scores"), "sc2")
-assert n1 == 2 and n2 == 1 and len(back["scores"]) == 6
+assert n1 == 2 and n2 == 1 and len(back["scores"]) == 3
 ok(t.post(f"/api/runs/{run['id']}/sync", json={}), "again")
 assert len(t.get(f"/api/sections/{sec['id']}/tools/{tool['id']}/scores")
-            .get_json()["scores"]) == 6
-print(f" restored {n1 + n2} exam marks, idempotently ✓")
+            .get_json()["scores"]) == 3
+print(f" restored {n1 + n2} exam marks from the attempts, idempotently ✓")
 
 section("isolation")
 t2 = A.app.test_client()

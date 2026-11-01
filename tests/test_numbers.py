@@ -178,3 +178,37 @@ assert t.post(f"/api/tools/{exam['id']}/runs",
 print(f" eligible now {d['eligible']} · a list of unknown ids is refused ✓")
 
 print("\n✅ test_numbers passed")
+
+section("a student reviews their mistakes, only when the teacher allows it")
+run2 = ok(t.post(f"/api/tools/{exam['id']}/runs",
+                 json={"section_id": sec["id"], "duration_min": 30,
+                       "show_answers": False}), "run-noreview")
+sr = A.app.test_client()
+sr.post("/api/student/login", json={"code": "20231047"})
+ex = [e for e in sr.get("/api/student/me").get_json()["exams"]
+      if e["run_id"] == run2["id"]][0]
+paper = ok(sr.post(f"/api/student/runs/{run2['id']}", json={}), "paper")
+qid = paper["questions"][0]["id"]
+ok(sr.post(f"/api/student/runs/{run2['id']}/submit",
+           json={"answers": {str(qid): "false"}}), "submit")   # wrong on purpose
+
+assert sr.get(f"/api/student/runs/{run2['id']}/answers").status_code == 403
+me = sr.get("/api/student/me").get_json()
+assert not [e for e in me["exams"] if e["run_id"] == run2["id"]][0]["can_review"]
+print(" review refused while the teacher keeps it off ✓")
+
+ok(t.put(f"/api/runs/{run2['id']}", json={"show_answers": True}), "allow")
+me = sr.get("/api/student/me").get_json()
+assert [e for e in me["exams"] if e["run_id"] == run2["id"]][0]["can_review"]
+rev = ok(sr.get(f"/api/student/runs/{run2['id']}/answers"), "answers")
+q = rev["questions"][0]
+assert q["correct"] is False and q["given"] == "خطأ" and q["answer"] == "صح"
+assert rev["score"] == 0 and rev["percentage"] == 0
+print(f" «{q['text']}» → أجاب «{q['given']}» · الصحيح «{q['answer']}» · {q['earned']}/{q['points']}")
+
+section("review never leaks another student's paper, or an unsat exam")
+other = A.app.test_client()
+other.post("/api/student/login", json={"code": "20231045"})
+assert other.get(f"/api/student/runs/{run2['id']}/answers").status_code == 409
+assert A.app.test_client().get(f"/api/student/runs/{run2['id']}/answers").status_code == 401
+print(" 409 for a student who did not sit it · 401 for no session ✓")

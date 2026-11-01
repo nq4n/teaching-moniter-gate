@@ -180,6 +180,12 @@ a{text-decoration:none;color:inherit}
     </header>
 
     <div class="body" id="body">
+      <div id="noRecovery" style="display:none;background:#FFF9EC;border:1px solid #F3E4C4;border-radius:12px;padding:13px 17px;font-size:13.5px;color:#8A5B11;line-height:1.9;margin-bottom:18px">
+        <b>حسابك بلا رمز استرجاع.</b> لا يوجد بريد إلكتروني في المنصة لإرسال رابط استرجاع،
+        فإن نسيت كلمة المرور فلا سبيل لاستعادة حسابك.
+        <a href="{{ url_for('account_page') }}" style="color:#2D5BFF;font-weight:600">ولّد رمزًا الآن</a>
+      </div>
+
       <div id="empty" class="empty hide">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-4 4"/></svg></div>
         <h2>لا توجد درجات بعد</h2>
@@ -469,6 +475,10 @@ load().then(() => {
   const tab = new URLSearchParams(location.search).get('tab');
   if(tab && TITLES[tab]) switchTab(tab);
 });
+
+fetch('/api/account').then(r=>r.ok?r.json():null).then(d=>{
+  if(d&&!d.has_recovery_code){const b=document.getElementById('noRecovery');if(b)b.style.display='block';}
+}).catch(()=>{});
 </script>
 </body>
 </html>

@@ -1,0 +1,207 @@
+"""Account recovery, terms, the final report sheet, delete warnings, admin view."""
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import io
+import re
+import openpyxl
+from _harness import boot, ok, teacher, one_grade, tool_named, section
+
+A, t, _ = boot("account")
+
+section("registration hands over a recovery code, once")
+r = t.post("/register", data={"username": "mo", "email": "mo@x.om",
+                              "password": "pw1234", "confirm_password": "pw1234"},
+           follow_redirects=True)
+assert r.status_code == 200
+page = r.get_data(as_text=True)
+m = re.search(r'id="code">([A-Z0-9\-]+)<', page)
+assert m, "the recovery code must be shown after registering"
+CODE = m.group(1)
+assert re.fullmatch(r"[A-Z0-9]{4}(-[A-Z0-9]{4}){3}", CODE), CODE
+print(" code:", CODE)
+
+with A.app.app_context():
+    u = A.User.query.filter_by(username="mo").first()
+    assert u.recovery_hash and CODE not in u.recovery_hash, "stored as a hash, never plainly"
+print(" stored only as a hash ✓")
+
+section("recovery resets the password and rotates the code")
+anon = A.app.test_client()
+assert anon.post("/recover", data={"username": "mo", "code": "WRON-GCOD-EEEE-EEEE",
+                                   "password": "new123", "confirm_password": "new123"}
+                 ).status_code == 200
+assert A.app.test_client().post("/login", data={"username": "mo", "password": "new123"}
+                                ).status_code == 200  # still the login page = refused
+r = anon.post("/recover", data={"username": "mo", "code": CODE.lower().replace("-", " "),
+                                "password": "new123", "confirm_password": "new123"})
+body = r.get_data(as_text=True)
+m2 = re.search(r'id="code">([A-Z0-9\-]+)<', body)
+assert m2 and m2.group(1) != CODE, "a fresh code must replace the spent one"
+print(" reset accepted (case/spacing tolerant) · new code issued ✓")
+
+fresh = A.app.test_client()
+r = fresh.post("/login", data={"username": "mo", "password": "new123"}, follow_redirects=False)
+assert r.status_code == 302, "the new password must work"
+assert anon.post("/recover", data={"username": "mo", "code": CODE,
+                                   "password": "x12345", "confirm_password": "x12345"}
+                 ).get_data(as_text=True).count("غير صحيح") >= 1, "the old code is spent"
+print(" old code no longer works ✓")
+
+section("an unknown username fails the same way as a wrong code")
+a = anon.post("/recover", data={"username": "nobody", "code": CODE,
+                                "password": "x12345", "confirm_password": "x12345"})
+assert "اسم المستخدم أو رمز الاسترجاع غير صحيح" in a.get_data(as_text=True)
+print(" one message for both, so usernames cannot be probed ✓")
+
+t = fresh
+section("changing password and regenerating the code from the account page")
+assert t.post("/api/account/password", json={"current": "wrong", "new": "abc123"}
+              ).status_code == 403
+assert t.post("/api/account/password", json={"current": "new123", "new": "abc"}
+              ).status_code == 400
+ok(t.post("/api/account/password", json={"current": "new123", "new": "abc123"}), "pw")
+assert t.post("/api/account/recovery-code", json={"current": "new123"}).status_code == 403
+code3 = ok(t.post("/api/account/recovery-code", json={"current": "abc123"}), "regen")["code"]
+assert re.fullmatch(r"[A-Z0-9]{4}(-[A-Z0-9]{4}){3}", code3)
+acct = ok(t.get("/api/account"), "acct")
+assert acct["has_recovery_code"] and acct["username"] == "mo"
+print(" password changed · new code", code3, "✓")
+
+# ── terms
+g, sec = one_grade(t)
+activity = tool_named(g, "نشاط عملي 1")
+r = ok(t.post(f"/api/sections/{sec['id']}/students",
+              json={"names": "محمد علي\nسارة سالم\nيوسف خالد"}), "students")
+ids = [s["id"] for s in r["students"]]
+nums = [s["code"] for s in r["students"]]
+ok(t.post(f"/api/sections/{sec['id']}/tools/{activity['id']}/roster-scores",
+          json={"scores": {str(i): 18 for i in ids}}), "marks")
+
+section("a term exists implicitly and owns the grades")
+d = ok(t.get("/api/terms"), "terms")
+assert len(d["terms"]) == 1 and d["terms"][0]["is_active"]
+term1 = d["terms"][0]
+assert term1["grades"] == 1 and term1["students"] == 3
+print(f" «{term1['name']}» · {term1['grades']} grade · {term1['students']} students")
+
+section("starting a new term copies the roster and leaves last term intact")
+d = ok(t.post("/api/terms", json={"name": "الفصل الدراسي الثاني 2026/2027",
+                                  "start_date": "2027-01-25",
+                                  "copy_from": term1["id"], "activate": True}), "new term")
+assert d["copied_grades"] == 1
+term2 = d["term"]
+print(f" «{term2['name']}» · copied {d['copied_grades']} grade · {term2['students']} students")
+
+g2 = ok(t.get("/api/structure"), "s2")
+assert len(g2) == 1 and g2[0]["name"] == g["name"]
+assert g2[0]["id"] != g["id"], "a new grade row, not the old one"
+sec2 = g2[0]["sections"][0]
+roster2 = ok(t.get(f"/api/sections/{sec2['id']}/students"), "r2")["students"]
+assert len(roster2) == 3
+assert sorted(x["code"] for x in roster2) == sorted(nums), "students keep their numbers"
+print(" roster carried over, same login numbers ✓")
+
+act2 = tool_named(g2[0], "نشاط عملي 1")
+clean = ok(t.get(f"/api/sections/{sec2['id']}/tools/{act2['id']}/roster-scores"), "clean")
+assert clean["marked"] == 0, "the new term starts with no marks"
+ov = ok(t.get("/api/overview"), "ov")
+assert ov["total_records"] == 0, "analytics show the active term only"
+print(" new term starts clean · analytics scoped to it ✓")
+
+section("last term's marks are still there when you switch back")
+ok(t.put(f"/api/terms/{term1['id']}", json={"activate": True}), "back")
+old = ok(t.get(f"/api/sections/{sec['id']}/tools/{activity['id']}/roster-scores"), "old")
+assert old["marked"] == 3
+assert ok(t.get("/api/overview"), "ov2")["total_records"] == 3
+print(f" {old['marked']} marks intact · average {old['average']}% ✓")
+
+section("the only term cannot be deleted; a spare one can")
+ok(t.put(f"/api/terms/{term2['id']}", json={"activate": True}), "act2")
+ok(t.delete(f"/api/terms/{term1['id']}"), "del", want=(204,))
+assert len(ok(t.get("/api/terms"), "t3")["terms"]) == 1
+assert t.delete(f"/api/terms/{term2['id']}").status_code == 400
+print(" refused deleting the last remaining term ✓")
+
+# ── report sheet
+section("the final report sheet")
+ok(t.post(f"/api/sections/{sec2['id']}/tools/{act2['id']}/roster-scores",
+          json={"scores": {str(x["id"]): 17 for x in roster2[:2]}}), "marks2")
+rep = ok(t.get(f"/api/sections/{sec2['id']}/report"), "report")
+assert rep["total"] == 3 and rep["complete"] == 0
+assert len(rep["tools"]) == len(g2[0]["tools"])
+missing = {s["name"]: len(s["missing"]) for s in rep["students"]}
+assert all(v > 0 for v in missing.values())
+marked = [s for s in rep["students"] if s["earned"] > 0]
+assert len(marked) == 2 and marked[0]["band"]
+print(f" {rep['total']} students × {len(rep['tools'])} tools"
+      f" · {rep['complete']} complete · average {rep['average']}%")
+
+xl = t.get(f"/api/sections/{sec2['id']}/report.xlsx")
+assert xl.status_code == 200 and xl.data[:2] == b"PK"
+wb = openpyxl.load_workbook(io.BytesIO(xl.data))
+assert wb.sheetnames == ["استمارة التقييم", "النواقص"]
+ws = wb["استمارة التقييم"]
+hdr = [c.value for c in ws[4]]
+assert hdr[:3] == ["م", "رقم الطالب", "اسم الطالب"]
+assert hdr[-3:][1] == "النسبة" and hdr[-1] == "المستوى"
+names = [ws.cell(row=i, column=3).value for i in range(5, 8)]
+assert sorted(names) == sorted(x["name"] for x in roster2)
+gaps = [c.value for c in wb["النواقص"]["A"]][1:]
+assert any(gaps), "the gaps sheet must name who is unmarked"
+print(f" workbook: {len(hdr)} columns · {wb.sheetnames} · {len([x for x in gaps if x])} listed as incomplete")
+
+# ── delete impact
+section("a delete says what it would destroy")
+imp = ok(t.get(f"/api/sections/{sec2['id']}/impact"), "sec impact")
+assert imp["students"] == 3 and imp["scores"] == 2
+gi = ok(t.get(f"/api/grades/{g2[0]['id']}/impact"), "grade impact")
+assert gi["students"] == 3 and gi["sections"] >= 1 and gi["tools"] > 0 and gi["lessons"] > 0
+print(f" section: {imp['students']} students, {imp['scores']} marks"
+      f" · grade: {gi['sections']} sections, {gi['tools']} tools, {gi['lessons']} lessons")
+
+# ── admin
+section("the school-admin view is closed to ordinary teachers")
+assert t.get("/api/admin/teachers").status_code == 403
+assert t.get("/admin").status_code == 302
+with A.app.app_context():
+    u = A.User.query.filter_by(username="mo").first()
+    u.is_admin = True
+    A.db.session.commit()
+d = ok(t.get("/api/admin/teachers"), "admin")
+assert any(x["username"] == "mo" for x in d["teachers"])
+row = [x for x in d["teachers"] if x["username"] == "mo"][0]
+assert row["students"] >= 3 and row["lessons_total"] > 0
+# counts only — no student's name may appear anywhere in this payload
+blob = str(d)
+assert not any(n in blob for n in ("محمد علي", "سارة سالم", "يوسف خالد")), "names leaked"
+print(f" {len(d['teachers'])} teacher(s) · {row['students']} students · aggregate only ✓")
+
+section("admin can reset a teacher who lost everything")
+t2 = A.app.test_client()
+teacher(t2, "zed")
+with A.app.app_context():
+    zid = A.User.query.filter_by(username="zed").first().id
+assert t.post(f"/api/admin/teachers/{zid}/reset-password",
+              json={"current": "wrong"}).status_code == 403
+d = ok(t.post(f"/api/admin/teachers/{zid}/reset-password",
+              json={"current": "abc123"}), "reset")
+assert d["username"] == "zed" and len(d["temp_password"]) >= 8
+fresh2 = A.app.test_client()
+assert fresh2.post("/login", data={"username": "zed", "password": d["temp_password"]},
+                   follow_redirects=False).status_code == 302
+print(" temp password issued and works ✓")
+with A.app.app_context():
+    aid = A.User.query.filter_by(username="mo").first().id
+assert t.post(f"/api/admin/teachers/{aid}/reset-password",
+              json={"current": "abc123"}).status_code == 400
+assert t2.get("/api/admin/teachers").status_code == 403
+print(" admin cannot reset themselves here · non-admin still 403 ✓")
+
+section("pages render")
+for page in ("/account", "/admin", "/recover", "/setup", "/grading", "/exams"):
+    assert t.get(page).status_code == 200, page
+print(" ✓")
+
+print("\n✅ test_account_terms passed")

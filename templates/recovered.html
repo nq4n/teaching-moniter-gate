@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>رمز الاسترجاع — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr-shell.css') }}">
+<style>
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.box{max-width:560px;width:100%;background:#fff;border:1px solid #E6E8EE;border-radius:18px;padding:34px}
+h1{font-size:22px;font-weight:700;margin-bottom:8px}
+.lead{font-size:14px;color:#646D7E;line-height:1.9;margin-bottom:22px}
+.codebox{background:#15171E;border-radius:14px;padding:22px;text-align:center;margin-bottom:18px}
+.codebox .c{direction:ltr;font-family:ui-monospace,Menlo,monospace;font-size:27px;font-weight:700;color:#fff;letter-spacing:.1em;word-break:break-all}
+.codebox .k{font-size:11.5px;color:#8A93A3;margin-top:9px}
+.warn{background:#FFF9EC;border:1px solid #F3E4C4;border-radius:12px;padding:14px 17px;font-size:13.5px;color:#8A5B11;line-height:1.9;margin-bottom:20px}
+.warn b{color:#15171E}
+</style>
+</head>
+<body>
+<div class="box">
+  <div style="text-align:center;margin-bottom:18px">{{ ui.beaconGradient(62,'rec') }}</div>
+  <h1>{% if new_account %}أهلًا بك في المنارة{% else %}تم تغيير كلمة المرور{% endif %}</h1>
+  <p class="lead">
+    {% if new_account %}
+      أُنشئ حسابك. هذا <b>رمز الاسترجاع</b> الخاص بك — به وحده تستعيد حسابك إن نسيت كلمة المرور.
+    {% else %}
+      كلمة مرورك الجديدة فعّالة الآن، وصدر لك <b>رمز استرجاع جديد</b> بدل القديم الذي استُخدم.
+    {% endif %}
+  </p>
+
+  <div class="codebox">
+    <div class="c" id="code">{{ code }}</div>
+    <div class="k">رمز الاسترجاع</div>
+  </div>
+
+  <div class="warn">
+    <b>احفظه الآن في مكان آمن.</b> لن يُعرض مرة أخرى — فالمنصة تحتفظ ببصمته المشفّرة لا به.
+    ولا يوجد بريد إلكتروني في هذه المنصة لإرساله إليك، فهو طريقك الوحيد للاسترجاع
+    (أو مدير المدرسة إن كان لمدرستك مدير على المنصة).
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn" onclick="copyCode()">نسخ الرمز</button>
+    <button class="btn ghost" onclick="downloadCode()">تنزيله كملف</button>
+    <a class="btn ghost" href="{{ url_for('dashboard') }}" style="margin-inline-start:auto">
+      حفظته — تابِع</a>
+  </div>
+  <span class="toast" id="toast" style="margin-top:14px"></span>
+</div>
+<script>
+const CODE={{ code|tojson }};
+function toast(m){const t=document.getElementById('toast');t.className='toast ok';t.textContent=m;setTimeout(()=>t.className='toast',3000);}
+async function copyCode(){
+  try{await navigator.clipboard.writeText(CODE);toast('نُسخ الرمز');}
+  catch(e){
+    const r=document.createRange();r.selectNode(document.getElementById('code'));
+    getSelection().removeAllRanges();getSelection().addRange(r);
+    toast('حدّد الرمز وانسخه يدويًا');
+  }
+}
+function downloadCode(){
+  const text=`المنارة — رمز الاسترجاع\nاسم المستخدم: {{ username or current_user.username }}\nالرمز: ${CODE}\n\nاحتفظ بهذا الملف في مكان آمن.\n`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+  a.download='manarah-recovery-code.txt';a.click();
+  toast('نُزّل الملف');
+}
+</script>
+</body>
+</html>

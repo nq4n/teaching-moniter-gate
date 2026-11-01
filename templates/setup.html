@@ -115,6 +115,23 @@ input[type=number]{direction:ltr;text-align:center}
     </header>
 
     <div class="body">
+      <div class="card" id="termCard" style="margin-bottom:20px">
+        <div class="hd"><h3>الفصل الدراسي</h3><div class="spacer"></div>
+          <span class="toast" id="termToast"></span></div>
+        <p class="lead" style="font-size:13px;color:#646D7E">كل ما تراه في المنصة يخصّ الفصل
+          النشط. بدء فصل جديد <b>لا يحذف</b> الفصل السابق — تبقى درجاته محفوظة، وتستطيع
+          العودة إليه متى شئت.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">
+          <div><label>الفصل النشط</label><select id="termSel" onchange="switchTerm()"></select></div>
+          <div><label>اسم فصل جديد</label><input id="newTerm" placeholder="الفصل الدراسي الثاني 2026/2027"></div>
+          <div><label>تاريخ بدايته</label><input type="date" id="newTermDate"></div>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;margin:14px 0 0;font-weight:500">
+          <input type="checkbox" id="copyRoster" checked style="width:auto;height:auto">
+          انسخ الصفوف والشُعب والطلبة من الفصل الحالي (بلا درجات)</label>
+        <button class="btn" style="margin-top:14px" onclick="newTerm()">بدء فصل جديد</button>
+      </div>
+
       <div class="card">
         <div class="hd"><span class="n">1</span><h3>الصفوف التي تدرّسها</h3></div>
         <p class="lead">اختر صفوفك فقط (لست مُلزمًا بكلها) وحدّد عدد الشُعب. تُنشأ أدوات القياس ودروسها تلقائيًا — بدون أي درجات.</p>
@@ -176,8 +193,50 @@ function renderSections(){
 }
 async function addSection(){const g=curG();if(!g){toast('s-toast','اختر صفًا',false);return;}await jreq(`/api/grades/${g.id}/sections`,{student_count:25});await reload();renderSections();}
 async function updateSection(sid,patch){await jreq(`/api/sections/${sid}`,patch,'PUT');await reloadQuiet();toast('s-toast','تم التحديث');}
-async function deleteSection(sid){if(!confirm('حذف هذه الشعبة ودرجاتها؟'))return;await fetch(`/api/sections/${sid}`,{method:'DELETE'});await reload();renderSections();}
-async function deleteGrade(){const g=curG();if(!g)return;if(!confirm(`حذف ${g.name} وكل شُعبه وأدواته ودرجاته؟`))return;await fetch(`/api/grades/${g.id}`,{method:'DELETE'});await reload();}
+/* Deleting cascades through students, marks and exam attempts, so say exactly
+   what is about to be lost — and make the user retype the name for the big one. */
+function lossLines(d){
+  const parts=[];
+  if(d.sections)parts.push(`${d.sections} شعبة`);
+  if(d.students)parts.push(`${d.students} طالبًا مسجّلًا`);
+  if(d.tools)parts.push(`${d.tools} أداة قياس`);
+  if(d.questions)parts.push(`${d.questions} سؤالًا`);
+  if(d.scores)parts.push(`${d.scores} درجة مرصودة`);
+  if(d.runs)parts.push(`${d.runs} تشغيل اختبار`);
+  if(d.attempts)parts.push(`${d.attempts} محاولة طالب`);
+  if(d.lessons)parts.push(`${d.lessons} درسًا`);
+  return parts;
+}
+async function deleteSection(sid){
+  let d={};
+  try{ d=await fetch(`/api/sections/${sid}/impact`).then(r=>r.json()); }catch(e){}
+  const lost=lossLines(d);
+  const msg=lost.length
+    ? `حذف شعبة «${d.name}» سيحذف نهائيًا:\n\n• ${lost.join('\n• ')}\n\nلا يمكن التراجع. متابعة؟`
+    : 'حذف هذه الشعبة؟ (لا بيانات فيها)';
+  if(!confirm(msg))return;
+  await fetch(`/api/sections/${sid}`,{method:'DELETE'});
+  await reload();renderSections();
+}
+async function deleteGrade(){
+  const g=curG();if(!g)return;
+  let d={};
+  try{ d=await fetch(`/api/grades/${g.id}/impact`).then(r=>r.json()); }catch(e){}
+  const lost=lossLines(d);
+  if(!lost.length){
+    if(!confirm(`حذف ${g.name}؟ (لا بيانات فيه)`))return;
+  }else{
+    if(!confirm(`حذف ${g.name} سيحذف نهائيًا:\n\n• ${lost.join('\n• ')}\n\nلا يمكن التراجع. متابعة؟`))return;
+    // A grade with marks in it is not something to lose to a stray click.
+    if(d.scores||d.students){
+      const typed=prompt(`للتأكيد، اكتب اسم الصف كما هو:\n${g.name}`);
+      if(typed===null)return;
+      if(typed.trim()!==g.name.trim()){alert('الاسم غير مطابق — أُلغي الحذف.');return;}
+    }
+  }
+  await fetch(`/api/grades/${g.id}`,{method:'DELETE'});
+  await reload();
+}
 function keepSel(sel,v){if(v&&[...sel.options].some(o=>o.value===v))sel.value=v;}
 async function reload(){
   buildGradePicker();                 // always render the 8 choices first
@@ -192,6 +251,38 @@ async function reload(){
 async function reloadQuiet(){try{const r=await fetch('/api/structure');STRUCTURE=r.ok?await r.json():STRUCTURE;}catch(e){}}
 window.__mnrManualLoader=true;
 reload().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+
+let TERMS=[];
+function tToast(m,ok=true){const t=document.getElementById('termToast');t.className='toast '+(ok?'ok':'err');t.textContent=m;setTimeout(()=>t.className='toast',4500);}
+async function loadTerms(){
+  const d=await fetch('/api/terms').then(r=>r.json()).catch(()=>null);
+  if(!d)return; TERMS=d.terms||[];
+  document.getElementById('termSel').innerHTML=TERMS.map(x=>
+    `<option value="${x.id}" ${x.is_active?'selected':''}>${x.name} — ${x.grades} صف · ${x.students} طالب</option>`).join('');
+}
+async function switchTerm(){
+  const id=document.getElementById('termSel').value;
+  const r=await fetch(`/api/terms/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({activate:true})});
+  if(r.ok){tToast('تم تبديل الفصل — جارٍ التحديث');setTimeout(()=>location.reload(),700);}
+  else tToast('تعذّر التبديل',false);
+}
+async function newTerm(){
+  const name=document.getElementById('newTerm').value.trim();
+  if(!name){tToast('اكتب اسم الفصل الجديد',false);return;}
+  const cur=TERMS.find(x=>x.is_active);
+  const copy=document.getElementById('copyRoster').checked&&cur;
+  if(!confirm(copy?`سيُنشأ «${name}» بنسخة من صفوف وشُعب وطلبة «${cur.name}» بلا درجات.\nويبقى «${cur.name}» وكل درجاته محفوظة. متابعة؟`
+                  :`سيُنشأ «${name}» فارغًا. متابعة؟`))return;
+  const r=await fetch('/api/terms',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,start_date:document.getElementById('newTermDate').value||null,
+      copy_from:copy?cur.id:null,activate:true})});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){tToast(`بدأ الفصل الجديد${d.copied_grades?` بـ ${d.copied_grades} صفًا`:''}`);
+    setTimeout(()=>location.reload(),900);}
+  else tToast(d.error||'تعذّر الإنشاء',false);
+}
+loadTerms();
 </script>
 </body>
 </html>

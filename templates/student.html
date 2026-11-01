@@ -55,6 +55,18 @@ input:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3p
 .result .big{font-size:46px;font-weight:700;line-height:1.1}
 .result .band{font-size:15px;font-weight:600;color:#0C7266;margin-top:7px}
 .save{font-size:12px;color:#8A93A3}
+.rq{border:1px solid #E6E8EE;border-radius:13px;padding:15px 16px;margin-bottom:10px}
+.rq.right{border-color:#BFE8E0;background:#F3FBF9}
+.rq.wrong{border-color:#F3D4D4;background:#FEF7F7}
+.rq .h{display:flex;align-items:flex-start;gap:9px;margin-bottom:10px}
+.rq .t{font-weight:600;font-size:14.5px;line-height:1.8;flex:1}
+.rq .m{font-size:11.5px;font-weight:700;white-space:nowrap}
+.rq.right .m{color:#0C7266}.rq.wrong .m{color:#B42318}
+.rq .a{font-size:13.5px;padding:8px 12px;border-radius:9px;margin-bottom:6px;line-height:1.7}
+.rq .a.you{background:#fff;border:1px solid #E6E8EE}
+.rq .a.ok{background:#E2F5F2;color:#0C7266;font-weight:600}
+.rq .a .l{font-size:11px;color:#8A93A3;display:block;margin-bottom:2px}
+.rq.right .a.ok{display:none}
 .tabs2{display:flex;background:#fff;border:1px solid #E6E8EE;border-radius:12px;overflow:hidden;margin-bottom:14px}
 .tabs2 button{flex:1;height:44px;border:none;background:#fff;font:inherit;font-size:14px;font-weight:600;color:#646D7E;cursor:pointer;border-inline-start:1px solid #E6E8EE}
 .tabs2 button:first-child{border-inline-start:none}
@@ -137,6 +149,16 @@ input:focus,textarea:focus{outline:none;border-color:#2D5BFF;box-shadow:0 0 0 3p
     </div>
   </div>
 
+  <!-- 3b — answer review -->
+  <div id="vReview" style="display:none">
+    <div class="card">
+      <h2 id="revTitle">مراجعة الإجابات</h2>
+      <div id="revSum"></div>
+      <div id="revList"></div>
+      <button class="btn ghost" style="margin-top:14px" onclick="refresh()">رجوع</button>
+    </div>
+  </div>
+
   <!-- 4 — result -->
   <div id="vDone" style="display:none">
     <div class="card">
@@ -152,7 +174,7 @@ const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'applicatio
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let PAPER=null,ANSWERS={},DEADLINE=null,TICK=null,SAVER=null,SUBMITTING=false;
 
-function show(v){['vLogin','vList','vExam','vDone'].forEach(x=>el(x).style.display=x===v?(x==='vLogin'?'block':'block'):'none');}
+function show(v){['vLogin','vList','vExam','vReview','vDone'].forEach(x=>el(x).style.display=x===v?(x==='vLogin'?'block':'block'):'none');}
 function err(id,m){const e=el(id);if(!m){e.className='err';e.textContent='';return;}e.className='err on';e.textContent=m;}
 function fmtDt(iso){if(!iso)return'';return new Date(iso).toLocaleString('ar',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
 
@@ -218,6 +240,7 @@ async function refresh(){
     }else{
       pill=`<span class="pill closed">مُغلق</span>`;
     }
+    if(e.can_review)action+=`<button class="btn ghost auto" onclick="review(${e.run_id})">راجع إجاباتك</button>`;
     return `<div class="ex ${e.phase==='open'&&e.attempt_status!=='submitted'?'live':''}">
       <div class="info">
         <div class="t">${esc(e.tool)}${e.round_no>1?` <span class="pill warn">${esc(e.label||'')}</span>`:''}</div>
@@ -265,6 +288,27 @@ function pick(qid,v,node){
   ANSWERS[qid]=v;
   node.parentNode.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
   node.classList.add('sel');
+}
+
+async function review(rid){
+  const r=await fetch(`/api/student/runs/${rid}/answers`);
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){err('listErr',d.error||'تعذّرت المراجعة');setTimeout(()=>err('listErr',''),5000);return;}
+  el('revTitle').textContent=`مراجعة — ${d.tool}`;
+  const right=d.questions.filter(q=>q.correct).length;
+  el('revSum').innerHTML=`<div class="sum">
+    <div class="b"><div class="v">${d.score} <span style="font-size:13px;color:#8A93A3">/ ${d.max_score}</span></div><div class="k">درجتك</div></div>
+    <div class="b"><div class="v">${right}<span style="font-size:13px;color:#8A93A3"> / ${d.questions.length}</span></div><div class="k">إجابة صحيحة</div></div>
+    <div class="b"><div class="v">${d.percentage}%</div><div class="k">النسبة</div></div>
+  </div>`;
+  el('revList').innerHTML=d.questions.map((q,i)=>`
+    <div class="rq ${q.correct?'right':'wrong'}">
+      <div class="h"><span class="t">${i+1}. ${esc(q.text)}</span>
+        <span class="m">${q.correct?'✓ صحيحة':'✕ خاطئة'} · ${q.earned}/${q.points}</span></div>
+      <div class="a you"><span class="l">إجابتك</span>${q.given!=null?esc(q.given):'— لم تُجب —'}</div>
+      <div class="a ok"><span class="l">الإجابة الصحيحة</span>${esc(q.answer||'—')}</div>
+    </div>`).join('');
+  show('vReview');window.scrollTo(0,0);
 }
 
 async function save(){

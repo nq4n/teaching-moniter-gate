@@ -82,15 +82,30 @@ by = {s["id"]: s for s in d["students"]}
 assert by[ids[0]]["score"] == 7 and by[ids[0]]["source"] == "teacher"
 print(f" {by[ids[0]]['score']} from '{by[ids[0]]['source']}'")
 
-section("older anonymous scores stay in analytics but out of the named table")
-ok(t.post(f"/api/sections/{sec['id']}/tools/{activity['id']}/scores",
-          json={"scores": "10 11 12"}), "anon")
-d = ok(t.get(ROSTER), "anon view")
-assert d["anonymous_scores"] == 3 and d["marked"] == 4
+section("the two entry paths can no longer double-count the same tool")
+c = t.post(f"/api/sections/{sec['id']}/tools/{activity['id']}/scores",
+           json={"scores": "10 11 12"})
+assert c.status_code == 409 and c.get_json()["redirect"] == "/grading"
 sc = ok(t.get(f"/api/sections/{sec['id']}/tools/{activity['id']}/scores"), "sc")
-assert sc["count"] == 7
-print(f" {d['anonymous_scores']} anonymous flagged · {d['marked']} named"
-      f" · {sc['count']} rows in the score log")
+assert sc["count"] == 4, "still one row per student, not seven"
+print(f" anonymous paste refused · {sc['count']} rows for {d['total']} students ✓")
+
+section("a section with no roster keeps the old anonymous behaviour")
+s2 = ok(t.post(f"/api/grades/{g['id']}/sections",
+               json={"name": "شعبة بلا طلبة", "student_count": 3}), "sec2")
+ok(t.post(f"/api/sections/{s2['id']}/tools/{activity['id']}/scores",
+          json={"scores": "10 11 12"}), "anon ok")
+assert ok(t.get(f"/api/sections/{s2['id']}/tools/{activity['id']}/scores"),
+          "sc2")["count"] == 3
+d2 = ok(t.get(f"/api/sections/{s2['id']}/tools/{activity['id']}/roster-scores"), "rs2")
+assert d2["anonymous_scores"] == 3 and d2["total"] == 0
+print(f" pasted {d2['anonymous_scores']} anonymous marks · flagged, not hidden ✓")
+
+section("registering a roster closes that path for the section")
+ok(t.post(f"/api/sections/{s2['id']}/students", json={"names": "طالب جديد"}), "add")
+assert t.post(f"/api/sections/{s2['id']}/tools/{activity['id']}/scores",
+              json={"scores": "9"}).status_code == 409
+print(" now refused ✓")
 
 section("guards")
 t2 = A.app.test_client()

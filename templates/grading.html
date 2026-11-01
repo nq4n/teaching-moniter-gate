@@ -31,7 +31,7 @@
 <body>
 {{ ui.loader() }}
 <div class="app">
-  {{ ui.sidenav('grading', username, school) }}
+  {{ ui.sidenav('grading', username, school, current_user.is_admin) }}
   <div class="main">
     <header class="top">
       <div><div class="crumb">قيّم كل طالب باسمه — ودرجات الاختبارات الإلكترونية تصل هنا تلقائيًا</div><h1>تقييم الطلبة</h1></div>
@@ -61,6 +61,15 @@
           <div style="font-weight:600;font-size:15px;margin-bottom:6px">لا طلبة في هذه الشعبة</div>
           <p class="muted" style="margin-bottom:16px">سجّل طلبة الشعبة أولًا لتقييمهم بأسمائهم.</p>
           <a class="btn" style="display:inline-flex" href="{{ url_for('students_page') }}">تسجيل الطلبة</a>
+        </div>
+
+        <div class="card" id="reportCard" style="display:none">
+          <div class="hd"><h3>استمارة تقييم الطالب</h3><div class="spacer"></div>
+            <span class="pill" id="repDone">—</span>
+            <a class="btn sm" id="repXlsx" href="#">تنزيل الاستمارة (Excel)</a></div>
+          <p class="lead">الكشف الكامل لهذه الشعبة: كل الطلبة × كل أدوات القياس، مع المجموع
+            والنسبة والمستوى — وورقة ثانية تسمّي من لم تُرصد له أدوات وأيّها.</p>
+          <div id="repGaps"></div>
         </div>
 
         <div class="card" id="upCard" style="display:none">
@@ -134,8 +143,11 @@ async function load(){
   el('noStudents').style.display=has?'none':'block';
   el('main').style.display=has?'block':'none';
   el('upCard').style.display=has?'block':'none';
+  el('reportCard').style.display=has?'block':'none';
   el('scTpl').href=`/api/sections/${sid}/tools/${tid}/scores-template.xlsx`;
+  el('repXlsx').href=`/api/sections/${sid}/report.xlsx`;
   if(!has)return;
+  loadReport(sid);
 
   el('title').textContent=`${d.tool.name} — ${d.section.name}`;
   el('progress').textContent=`${d.marked} / ${d.total} مُقيَّم`;
@@ -217,6 +229,19 @@ function applyAll(){
   if(!rows.length){toast('حدّد الطلبة أولًا',false);return;}
   rows.forEach(tr=>{const i=tr.querySelector('.sc');i.value=v;onEdit(i);});
   toast(`طُبّقت ${v} على ${rows.length} طالبًا — اضغط «حفظ الدرجات»`);
+}
+
+async function loadReport(sid){
+  const d=await fetch(`/api/sections/${sid}/report`).then(r=>r.json()).catch(()=>null);
+  if(!d||d.error)return;
+  el('repDone').textContent=`${d.complete} / ${d.total} مكتمل`;
+  el('repDone').className='pill '+(d.complete===d.total?'open':'warn');
+  const gaps=d.students.filter(s=>s.missing.length);
+  el('repGaps').innerHTML=gaps.length
+    ? `<div class="note"><b>${gaps.length}</b> من ${d.total} طالبًا تنقصهم أدوات:<br>`
+      +gaps.slice(0,6).map(s=>`${esc(s.name)} — ${s.missing.length} أداة (${esc(s.missing.slice(0,3).join('، '))}${s.missing.length>3?' …':''})`).join('<br>')
+      +(gaps.length>6?`<br>… و${gaps.length-6} طالبًا آخر (التفاصيل في ورقة «النواقص»)`:'')+'</div>'
+    : `<div class="hint">كل الطلبة مرصودون في كل الأدوات — الاستمارة جاهزة للتسليم.</div>`;
 }
 
 /* ── marks upload ── */

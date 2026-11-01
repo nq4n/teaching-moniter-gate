@@ -103,6 +103,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    recovery_hash = db.Column(db.String(255))   # hash of the one-time recovery code
     school = db.Column(db.String(200), default="مدرسة")
     is_admin = db.Column(db.Boolean, default=False)
     term_name = db.Column(db.String(120), default="الفصل الدراسي الأول 2026/2027")
@@ -118,10 +119,25 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
 
+class Term(db.Model):
+    """فصل دراسي — scopes everything a teacher sees, so a new term does not
+    mean deleting the last one."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    start_date = db.Column(db.Date)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref=db.backref("terms", cascade="all, delete-orphan"))
+    grades = db.relationship("Grade", cascade="all, delete-orphan", backref="term")
+
+
 class Grade(db.Model):
     """صف دراسي — e.g. الصف الخامس"""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    term_id = db.Column(db.Integer, db.ForeignKey("term.id"), index=True)
     name = db.Column(db.String(100), nullable=False)
     level = db.Column(db.Integer)  # 5..12, for ordering
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -256,6 +272,7 @@ class ExamRun(db.Model):
     allowed_json = db.Column(db.Text)   # JSON list[int] — an explicit allow-list of student ids
     shuffle = db.Column(db.Boolean, default=True)
     show_score = db.Column(db.Boolean, default=True)
+    show_answers = db.Column(db.Boolean, default=False)  # let the student see their mistakes
     state = db.Column(db.String(12), default="scheduled")  # scheduled / closed  (open is derived from the clock)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -382,20 +399,43 @@ def parse_date(v):
         return None
 
 
+def active_term(user=None):
+    """The term the teacher is working in; created on first need."""
+    user = user or current_user
+    t = Term.query.filter_by(user_id=user.id, is_active=True).first()
+    if t is None:
+        t = Term.query.filter_by(user_id=user.id).order_by(Term.id.desc()).first()
+        if t is not None:
+            t.is_active = True
+            db.session.commit()
+    if t is None:
+        t = Term(user_id=user.id, name=user.term_name or "الفصل الدراسي الأول",
+                 start_date=user.term_start or DEFAULT_TERM_START, is_active=True)
+        db.session.add(t)
+        db.session.flush()
+        # Adopt any grades that pre-date terms.
+        Grade.query.filter_by(user_id=user.id, term_id=None).update({"term_id": t.id})
+        db.session.commit()
+    return t
+
+
 def _grades_for_user():
+    """Only the active term's grades — last term's data stays, out of the way."""
+    t = active_term()
     return (
-        Grade.query.filter_by(user_id=current_user.id)
+        Grade.query.filter_by(user_id=current_user.id, term_id=t.id)
         .order_by(Grade.level.asc().nullslast(), Grade.name.asc())
         .all()
     )
 
 
 def _all_entries_for_user():
+    t = active_term()
     return (
         db.session.query(ScoreEntry)
         .join(Tool, ScoreEntry.tool_id == Tool.id)
         .join(Grade, Tool.grade_id == Grade.id)
-        .filter(Grade.user_id == current_user.id)
+        .filter(Grade.user_id == current_user.id, Grade.term_id == t.id)
         .all()
     )
 
@@ -445,10 +485,13 @@ def register():
 
         user = User(username=username, email=email or f"{username}@school.om", school=school)
         user.set_password(password)
+        code = gen_recovery_code()
+        user.recovery_hash = hash_recovery(code)
         db.session.add(user)
         db.session.commit()
         login_user(user)
-        return redirect(url_for("dashboard"))
+        # Shown exactly once — it is stored only as a hash.
+        return render_template("recovered.html", code=code, new_account=True)
     return render_template("register.html")
 
 
@@ -457,6 +500,390 @@ def register():
 def logout():
     logout_user()
     return redirect(url_for("login"))
+
+
+# ─────────────────────────────────────────────────────────────
+# Terms (الفصول الدراسية)
+#
+# A grade belongs to a term. Everything a teacher sees is scoped to their
+# ACTIVE term, so starting the second term does not mean deleting the first:
+# last term's grades, students and marks stay queryable and exportable, and
+# the new term starts with the same roster and a clean score log.
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/terms", methods=["GET", "POST"])
+@login_required
+def terms():
+    if request.method == "POST":
+        data = request.get_json(force=True) or {}
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "اسم الفصل مطلوب"}), 400
+        if Term.query.filter_by(user_id=current_user.id, name=name).first():
+            return jsonify({"error": "يوجد فصل بهذا الاسم"}), 409
+        term = Term(user_id=current_user.id, name=name,
+                    start_date=parse_date(data.get("start_date")) or date.today())
+        db.session.add(term)
+        db.session.flush()
+
+        copy_from = data.get("copy_from")
+        copied = 0
+        if copy_from:
+            src = db.session.get(Term, int(copy_from))
+            if src is None or src.user_id != current_user.id:
+                db.session.rollback()
+                return jsonify({"error": "الفصل المصدر غير موجود"}), 404
+            copied = _clone_structure(src, term)
+
+        if data.get("activate", True):
+            _activate_term(term)
+        db.session.commit()
+        return jsonify({"term": _term_json(term), "copied_grades": copied}), 201
+
+    active = active_term()
+    return jsonify({
+        "active_id": active.id if active else None,
+        "terms": [_term_json(x) for x in
+                  Term.query.filter_by(user_id=current_user.id)
+                  .order_by(Term.start_date.desc(), Term.id.desc()).all()],
+    })
+
+
+@app.route("/api/terms/<int:tid>", methods=["PUT", "DELETE"])
+@login_required
+def term_detail(tid):
+    term = db.session.get(Term, tid)
+    if term is None or term.user_id != current_user.id:
+        return jsonify({"error": "غير موجود"}), 404
+
+    if request.method == "DELETE":
+        if Term.query.filter_by(user_id=current_user.id).count() <= 1:
+            return jsonify({"error": "لا يمكن حذف الفصل الوحيد"}), 400
+        db.session.delete(term)
+        db.session.flush()
+        if not Term.query.filter_by(user_id=current_user.id, is_active=True).first():
+            nxt = (Term.query.filter_by(user_id=current_user.id)
+                   .order_by(Term.start_date.desc()).first())
+            if nxt:
+                nxt.is_active = True
+        db.session.commit()
+        return "", 204
+
+    data = request.get_json(force=True) or {}
+    if data.get("name"):
+        term.name = str(data["name"]).strip()[:120]
+    if "start_date" in data:
+        term.start_date = parse_date(data["start_date"]) or term.start_date
+    if data.get("activate"):
+        _activate_term(term)
+    db.session.commit()
+    return jsonify(_term_json(term))
+
+
+@app.route("/api/terms/<int:tid>/impact")
+@login_required
+def term_impact(tid):
+    term = db.session.get(Term, tid)
+    if term is None or term.user_id != current_user.id:
+        return jsonify({"error": "غير موجود"}), 404
+    grades = Grade.query.filter_by(user_id=current_user.id, term_id=tid).all()
+    gids = [g.id for g in grades] or [0]
+    scores = (db.session.query(ScoreEntry)
+              .join(Tool, ScoreEntry.tool_id == Tool.id)
+              .filter(Tool.grade_id.in_(gids)).count())
+    return jsonify({
+        "name": term.name,
+        "grades": len(grades),
+        "sections": sum(len(g.sections) for g in grades),
+        "students": sum(len(s.students) for g in grades for s in g.sections),
+        "scores": scores,
+    })
+
+
+def _term_json(t):
+    grades = Grade.query.filter_by(user_id=t.user_id, term_id=t.id).all()
+    return {
+        "id": t.id, "name": t.name, "start_date": iso(t.start_date),
+        "is_active": bool(t.is_active),
+        "grades": len(grades),
+        "students": sum(len(s.students) for g in grades for s in g.sections),
+    }
+
+
+def _activate_term(term):
+    Term.query.filter_by(user_id=term.user_id).update({"is_active": False})
+    term.is_active = True
+    # The calendar fields on User follow whichever term is active.
+    term.user.term_name = term.name
+    term.user.term_start = term.start_date
+
+
+def _archive_number(code, term_id):
+    """Park an old term's login number so the live row can take it over.
+
+    A student's number has to keep working term after term, and it also has to
+    resolve to exactly one row. So the new term's row inherits the number and
+    the previous one is parked under a form that no login can produce: the '#'
+    never survives normalize_number(), which keeps digits only.
+    """
+    base = (code or "")[:14]
+    for n in range(50):
+        candidate = f"{base}#{term_id}" if n == 0 else f"{base}#{term_id}-{n}"
+        if not number_taken(candidate):
+            return candidate[:20]
+    return f"{secrets.randbelow(10 ** 9)}#{term_id}"[:20]
+
+
+def _clone_structure(src, dst):
+    """Carry grades, sections and the student roster into a new term.
+
+    Tools come from the seed (a new term has its own assessment plan) and no
+    scores, questions or exam runs are copied — the point is a clean slate with
+    the same students, who keep the login numbers already handed out to them.
+    The previous term's rows stay put, with their marks, under parked numbers.
+    """
+    n = 0
+    for g in Grade.query.filter_by(user_id=src.user_id, term_id=src.id).all():
+        ng = Grade(user_id=g.user_id, name=g.name, level=g.level, term_id=dst.id)
+        db.session.add(ng)
+        db.session.flush()
+        seed_tools(ng, True)
+        seed_lessons(ng)
+        for s in g.sections:
+            ns = Section(grade_id=ng.id, name=s.name, student_count=s.student_count)
+            db.session.add(ns)
+            db.session.flush()
+            for st in s.students:
+                carried = st.code
+                st.code = _archive_number(carried, src.id)
+                db.session.flush()
+                db.session.add(Student(section_id=ns.id, name=st.name,
+                                       code=carried, seat_no=st.seat_no,
+                                       active=st.active))
+                db.session.flush()
+        n += 1
+    return n
+
+
+# ─────────────────────────────────────────────────────────────
+# Account recovery
+#
+# There is no mail server in this deployment, so a reset link is not an option.
+# Instead every teacher gets a recovery code at registration: a long random
+# string shown once, which they store somewhere safe. It is kept only as a
+# hash, exactly like the password, so a leaked database does not hand anyone a
+# way in. An admin (ADMIN_USERNAME) can also reset a teacher who lost both.
+# ─────────────────────────────────────────────────────────────
+
+RECOVERY_ALPHABET = "ACDEFGHJKLMNPQRTUVWXY34679"
+
+
+def gen_recovery_code():
+    raw = "".join(secrets.choice(RECOVERY_ALPHABET) for _ in range(16))
+    return "-".join(raw[i:i + 4] for i in range(0, 16, 4))
+
+
+def _norm_recovery(v):
+    """Dashes, spaces and case are presentation only — never part of the secret."""
+    return re.sub(r"[^A-Z0-9]", "", str(v or "").upper())
+
+
+def hash_recovery(code):
+    return generate_password_hash(_norm_recovery(code))
+
+
+def recovery_matches(user, code):
+    return bool(user and user.recovery_hash
+                and check_password_hash(user.recovery_hash, _norm_recovery(code)))
+
+
+@app.route("/recover", methods=["GET", "POST"])
+def recover():
+    """Set a new password using the recovery code issued at registration."""
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        code = _norm_recovery(request.form.get("code"))
+        pw = request.form.get("password") or ""
+        confirm = request.form.get("confirm_password") or ""
+        if not username or not code or not pw:
+            return render_template("recover.html", error="يرجى إكمال جميع الحقول")
+        if pw != confirm:
+            return render_template("recover.html", error="كلمتا المرور غير متطابقتين")
+        if len(pw) < 6:
+            return render_template("recover.html", error="كلمة المرور قصيرة جدًا (٦ أحرف على الأقل)")
+
+        user = User.query.filter_by(username=username).first()
+        if not recovery_matches(user, code):
+            # One message for every failure, so this cannot be used to discover
+            # which usernames exist.
+            return render_template("recover.html",
+                                   error="اسم المستخدم أو رمز الاسترجاع غير صحيح")
+        user.set_password(pw)
+        new_code = gen_recovery_code()
+        user.recovery_hash = hash_recovery(new_code)
+        db.session.commit()
+        login_user(user)
+        # The old code is spent; hand over the replacement once.
+        return render_template("recovered.html", code=new_code)
+    return render_template("recover.html")
+
+
+@app.route("/account", methods=["GET"])
+@login_required
+def account_page():
+    return render_template("account.html", username=current_user.username,
+                           school=current_user.school)
+
+
+@app.route("/api/account/password", methods=["POST"])
+@login_required
+def change_password():
+    data = request.get_json(force=True) or {}
+    if not current_user.check_password(data.get("current") or ""):
+        return jsonify({"error": "كلمة المرور الحالية غير صحيحة"}), 403
+    new = data.get("new") or ""
+    if len(new) < 6:
+        return jsonify({"error": "كلمة المرور الجديدة قصيرة جدًا (٦ أحرف على الأقل)"}), 400
+    current_user.set_password(new)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/account/recovery-code", methods=["POST"])
+@login_required
+def regen_recovery_code():
+    """Issue a fresh recovery code. Shown once; only its hash is stored."""
+    data = request.get_json(force=True) or {}
+    if not current_user.check_password(data.get("current") or ""):
+        return jsonify({"error": "أدخل كلمة المرور الحالية للتأكيد"}), 403
+    code = gen_recovery_code()
+    current_user.recovery_hash = hash_recovery(code)
+    db.session.commit()
+    return jsonify({"code": code})
+
+
+@app.route("/api/account", methods=["GET", "PUT"])
+@login_required
+def account_api():
+    if request.method == "PUT":
+        data = request.get_json(force=True) or {}
+        if data.get("school"):
+            current_user.school = str(data["school"]).strip()[:200]
+        if data.get("email"):
+            email = str(data["email"]).strip()[:120]
+            clash = User.query.filter(User.email == email,
+                                      User.id != current_user.id).first()
+            if clash:
+                return jsonify({"error": "البريد الإلكتروني مُستخدم بالفعل"}), 409
+            current_user.email = email
+        db.session.commit()
+    return jsonify({
+        "username": current_user.username,
+        "email": current_user.email,
+        "school": current_user.school,
+        "is_admin": bool(current_user.is_admin),
+        "term_name": current_user.term_name,
+        "has_recovery_code": bool(current_user.recovery_hash),
+    })
+
+
+# ── School admin: a read-only view across the school's teachers ──
+
+@app.route("/api/admin/teachers")
+@login_required
+def admin_teachers():
+    if not current_user.is_admin:
+        return jsonify({"error": "هذه الصفحة لمدير المدرسة"}), 403
+    out = []
+    for u in User.query.order_by(User.username).all():
+        grades = Grade.query.filter_by(user_id=u.id).all()
+        entries = (db.session.query(ScoreEntry)
+                   .join(Tool, ScoreEntry.tool_id == Tool.id)
+                   .join(Grade, Tool.grade_id == Grade.id)
+                   .filter(Grade.user_id == u.id).all())
+        students = sum(len(s.students) for g in grades for s in g.sections)
+        lessons = [l for g in grades for l in g.lessons]
+        taught = [l for l in lessons if l.status == "taught"]
+        out.append({
+            "id": u.id, "username": u.username, "school": u.school,
+            "is_admin": bool(u.is_admin),
+            "grades": len(grades),
+            "sections": sum(len(g.sections) for g in grades),
+            "students": students,
+            "tools": sum(len(g.tools) for g in grades),
+            "scores": len(entries),
+            "average": round(statistics.mean([e.percentage for e in entries]), 1) if entries else None,
+            "lessons_taught": len(taught),
+            "lessons_total": len(lessons),
+        })
+    return jsonify({"teachers": out, "school": current_user.school})
+
+
+@app.route("/api/admin/teachers/<int:uid>/reset-password", methods=["POST"])
+@login_required
+def admin_reset_password(uid):
+    """Last resort when a teacher has lost both password and recovery code."""
+    if not current_user.is_admin:
+        return jsonify({"error": "هذه الصفحة لمدير المدرسة"}), 403
+    u = db.session.get(User, uid)
+    if u is None:
+        return jsonify({"error": "غير موجود"}), 404
+    if u.id == current_user.id:
+        return jsonify({"error": "استخدم صفحة حسابك لتغيير كلمة مرورك"}), 400
+    data = request.get_json(force=True) or {}
+    if not current_user.check_password(data.get("current") or ""):
+        return jsonify({"error": "أدخل كلمة مرورك للتأكيد"}), 403
+    temp = gen_recovery_code()[:9]
+    u.set_password(temp)
+    db.session.commit()
+    return jsonify({"username": u.username, "temp_password": temp})
+
+
+@app.route("/admin")
+@login_required
+def admin_page():
+    if not current_user.is_admin:
+        return redirect(url_for("dashboard"))
+    return render_template("admin.html", username=current_user.username,
+                           school=current_user.school)
+
+
+# ── What a delete would destroy, before it happens ──
+
+@app.route("/api/grades/<int:gid>/impact")
+@login_required
+def grade_impact(gid):
+    g = Grade.query.get_or_404(gid)
+    if g.user_id != current_user.id:
+        return jsonify({"error": "غير مصرّح"}), 403
+    sections = g.sections
+    students = sum(len(s.students) for s in sections)
+    scores = (db.session.query(ScoreEntry)
+              .join(Tool, ScoreEntry.tool_id == Tool.id)
+              .filter(Tool.grade_id == gid).count())
+    attempts = (db.session.query(ExamAttempt)
+                .join(ExamRun, ExamAttempt.run_id == ExamRun.id)
+                .filter(ExamRun.tool_id.in_([t.id for t in g.tools]) if g.tools else False)
+                .count() if g.tools else 0)
+    return jsonify({"name": g.name, "sections": len(sections), "students": students,
+                    "tools": len(g.tools), "scores": scores,
+                    "questions": sum(len(t.questions) for t in g.tools),
+                    "attempts": attempts, "lessons": len(g.lessons)})
+
+
+@app.route("/api/sections/<int:sid>/impact")
+@login_required
+def section_impact(sid):
+    s = Section.query.get_or_404(sid)
+    if not _owns_section(s):
+        return jsonify({"error": "غير مصرّح"}), 403
+    attempts = (db.session.query(ExamAttempt)
+                .join(ExamRun, ExamAttempt.run_id == ExamRun.id)
+                .filter(ExamRun.section_id == sid).count())
+    return jsonify({"name": s.name, "students": len(s.students),
+                    "scores": ScoreEntry.query.filter_by(section_id=sid).count(),
+                    "runs": ExamRun.query.filter_by(section_id=sid).count(),
+                    "attempts": attempts})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -709,9 +1136,11 @@ def setup():
         n_sections = max(0, int(item.get("sections", 0)))
         per = max(0, int(item.get("students_per_section", 0)))
 
-        grade = Grade.query.filter_by(user_id=current_user.id, name=name).first()
+        grade = Grade.query.filter_by(user_id=current_user.id, name=name,
+                                      term_id=active_term().id).first()
         if not grade:
-            grade = Grade(user_id=current_user.id, name=name, level=item.get("level"))
+            grade = Grade(user_id=current_user.id, name=name,
+                          level=item.get("level"), term_id=active_term().id)
             db.session.add(grade)
             db.session.flush()
             created += 1
@@ -737,7 +1166,8 @@ def create_grade():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "الاسم مطلوب"}), 400
-    g = Grade(user_id=current_user.id, name=name, level=data.get("level"))
+    g = Grade(user_id=current_user.id, name=name, level=data.get("level"),
+              term_id=active_term().id)
     db.session.add(g)
     db.session.flush()
     seed_tools(g, True)
@@ -946,6 +1376,8 @@ def bulk_scores(sid, tid):
         return jsonify({"error": "غير مصرّح"}), 403
     if t.grade_id != s.grade_id:
         return jsonify({"error": "الأداة لا تخص صف هذه الشعبة"}), 400
+    if _has_roster(s):
+        return jsonify({"error": ANON_BLOCKED, "redirect": "/grading"}), 409
 
     data = request.get_json(force=True) or {}
     max_score = float(data.get("max_score", t.max_score) or 100)
@@ -1009,6 +1441,19 @@ def get_scores(sid, tid):
 IGNORE_HEADERS = {
     "", "م", "الاسم", "اسم", "الطالب", "name", "no", "no.", "#", "رقم", "الرقم", "t",
 }
+
+
+# Two ways into the score log would double-count: a section with a named roster
+# is marked per student, and the anonymous paste/import is closed for it. A
+# section with no students registered keeps the old behaviour untouched.
+ANON_BLOCKED = (
+    "هذه الشعبة فيها طلبة مسجّلون — قيّمهم بأسمائهم من صفحة «تقييم الطلبة» "
+    "بدل لصق عمود درجات مجهول، وإلا حُسبت الدرجات مرتين في التحليلات."
+)
+
+
+def _has_roster(section):
+    return any(x.active for x in section.students)
 
 
 def _norm(s):
@@ -1260,6 +1705,9 @@ def import_section(sid):
     s = Section.query.get_or_404(sid)
     if s.grade.user_id != current_user.id:
         return jsonify({"error": "غير مصرّح"}), 403
+
+    if _has_roster(s):
+        return jsonify({"error": ANON_BLOCKED, "redirect": "/grading"}), 409
 
     f = request.files.get("file")
     if not f or not f.filename:
@@ -1783,6 +2231,7 @@ def _run_json(run, now=None):
         "restricted": run.allowed_ids is not None,
         "shuffle": bool(run.shuffle),
         "show_score": bool(run.show_score),
+        "show_answers": bool(run.show_answers),
         "state": run.state,
         "phase": phase,
         "eligible": len(eligible),
@@ -1974,7 +2423,8 @@ def list_runs():
         db.session.query(ExamRun)
         .join(Tool, ExamRun.tool_id == Tool.id)
         .join(Grade, Tool.grade_id == Grade.id)
-        .filter(Grade.user_id == current_user.id)
+        .filter(Grade.user_id == current_user.id,
+                Grade.term_id == active_term().id)
         .order_by(ExamRun.start_at.desc().nullslast(), ExamRun.id.desc())
         .all()
     )
@@ -2040,6 +2490,7 @@ def create_run(tid):
         allowed_json=allowed_json,
         shuffle=bool(data.get("shuffle", True)),
         show_score=bool(data.get("show_score", True)),
+        show_answers=bool(data.get("show_answers", False)),
         state="scheduled",
     )
     db.session.add(run)
@@ -2097,7 +2548,7 @@ def run_detail(rid):
                 run.end_at = parse_dt(data["end_at"])
             if "duration_min" in data:
                 run.duration_min = int(data["duration_min"]) if data["duration_min"] not in (None, "") else None
-            for f in ("shuffle", "show_score"):
+            for f in ("shuffle", "show_score", "show_answers"):
                 if f in data:
                     setattr(run, f, bool(data[f]))
             if "allowed_students" in data:
@@ -2874,6 +3325,167 @@ def roster_scores_template(sid, tid):
     return _xlsx_response(wb, f"scores_{t.name}_{s.name}.xlsx")
 
 
+# ── استمارة تقييم الطالب — the sheet the teacher actually hands in ──
+
+def _section_report(section):
+    """Every student × every tool, with totals. The shape the MoE form wants."""
+    grade = section.grade
+    tools = sorted(grade.tools, key=lambda x: (tool_date(grade.user, x) or date.max))
+    rows = {}
+    for e in ScoreEntry.query.filter_by(section_id=section.id).all():
+        if e.student_id:
+            rows.setdefault(e.student_id, {})[e.tool_id] = e
+
+    out = []
+    for st in section.students:
+        marks = rows.get(st.id, {})
+        earned = sum(m.score or 0 for m in marks.values())
+        out_of = sum(t.max_score or 0 for t in tools if t.id in marks)
+        total_possible = sum(t.max_score or 0 for t in tools)
+        pct = round((earned / total_possible) * 100, 1) if total_possible else 0
+        out.append({
+            "student": st,
+            "marks": marks,
+            "earned": round(earned, 2),
+            "out_of": round(out_of, 2),
+            "total_possible": round(total_possible, 2),
+            "percentage": pct,
+            "band": band_of(pct),
+            "missing": [t.name for t in tools if t.id not in marks],
+        })
+    return tools, out
+
+
+@app.route("/api/sections/<int:sid>/report")
+@login_required
+def section_report(sid):
+    s = Section.query.get_or_404(sid)
+    if not _owns_section(s):
+        return jsonify({"error": "غير مصرّح"}), 403
+    tools, rows = _section_report(s)
+    done = [r for r in rows if not r["missing"]]
+    return jsonify({
+        "section": {"id": s.id, "name": s.name, "grade": s.grade.name},
+        "term": current_user.term_name,
+        "tools": [{"id": t.id, "name": t.name, "kind": t.kind,
+                   "max_score": t.max_score} for t in tools],
+        "total_possible": round(sum(t.max_score or 0 for t in tools), 2),
+        "students": [{
+            "id": r["student"].id, "name": r["student"].name,
+            "code": r["student"].code, "seat_no": r["student"].seat_no,
+            "marks": {str(tid): round(m.score, 2) for tid, m in r["marks"].items()},
+            "earned": r["earned"], "percentage": r["percentage"],
+            "band": r["band"], "missing": r["missing"],
+        } for r in rows],
+        "complete": len(done),
+        "total": len(rows),
+        "average": round(statistics.mean([r["percentage"] for r in rows]), 1) if rows else None,
+    })
+
+
+@app.route("/api/sections/<int:sid>/report.xlsx")
+@login_required
+def section_report_xlsx(sid):
+    """The full record: one row per student, one column per tool, with totals."""
+    s = Section.query.get_or_404(sid)
+    if not _owns_section(s):
+        return jsonify({"error": "غير مصرّح"}), 403
+    import openpyxl
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    tools, rows = _section_report(s)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "استمارة التقييم"
+    ws.sheet_view.rightToLeft = True
+
+    thin = Side(style="thin", color="D5D9E2")
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    centre = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    hdr_font = Font(bold=True, color="FFFFFF", size=10)
+    hdr_fill = PatternFill("solid", fgColor="2D5BFF")
+    tot_fill = PatternFill("solid", fgColor="0F9488")
+
+    title = ws.cell(row=1, column=1,
+                    value=f"استمارة تقييم الطالب — {s.grade.name} · {s.name}")
+    title.font = Font(bold=True, size=13)
+    ws.cell(row=2, column=1, value=f"{current_user.school} · {current_user.term_name}").font = (
+        Font(size=10, color="646D7E"))
+
+    head = 4
+    cols = ["م", "رقم الطالب", "اسم الطالب"]
+    for t in tools:
+        cols.append(f"{t.name}\n({t.max_score:g})")
+    cols += [f"المجموع\n({sum(t.max_score or 0 for t in tools):g})", "النسبة", "المستوى"]
+
+    for j, label in enumerate(cols, start=1):
+        c = ws.cell(row=head, column=j, value=label)
+        c.font, c.fill, c.alignment, c.border = hdr_font, hdr_fill, centre, box
+        if j > len(cols) - 3:
+            c.fill = tot_fill
+    ws.row_dimensions[head].height = 42
+    ws.column_dimensions["A"].width = 5
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 30
+    for j in range(4, len(cols) + 1):
+        ws.column_dimensions[get_column_letter(j)].width = 13
+
+    for i, r in enumerate(rows, start=head + 1):
+        st = r["student"]
+        ws.cell(row=i, column=1, value=st.seat_no or i - head).alignment = centre
+        ws.cell(row=i, column=2, value=st.code).alignment = centre
+        ws.cell(row=i, column=3, value=st.name)
+        for j, t in enumerate(tools, start=4):
+            m = r["marks"].get(t.id)
+            c = ws.cell(row=i, column=j, value=(round(m.score, 2) if m else None))
+            c.alignment = centre
+            c.border = box
+        c = ws.cell(row=i, column=len(cols) - 2, value=r["earned"])
+        c.font, c.alignment = Font(bold=True), centre
+        ws.cell(row=i, column=len(cols) - 1, value=r["percentage"] / 100).number_format = "0.0%"
+        ws.cell(row=i, column=len(cols) - 1).alignment = centre
+        ws.cell(row=i, column=len(cols), value=r["band"]).alignment = centre
+        for j in range(1, len(cols) + 1):
+            ws.cell(row=i, column=j).border = box
+
+    # class average under each tool column
+    last = head + len(rows) + 1
+    ws.cell(row=last, column=3, value="متوسط الشعبة").font = Font(bold=True)
+    for j, t in enumerate(tools, start=4):
+        vals = [r["marks"][t.id].score for r in rows if t.id in r["marks"]]
+        c = ws.cell(row=last, column=j,
+                    value=round(statistics.mean(vals), 2) if vals else None)
+        c.font, c.alignment, c.border = Font(bold=True), centre, box
+    if rows:
+        c = ws.cell(row=last, column=len(cols) - 2,
+                    value=round(statistics.mean([r["earned"] for r in rows]), 2))
+        c.font, c.alignment = Font(bold=True), centre
+
+    ws.freeze_panes = ws.cell(row=head + 1, column=4)
+
+    # A second sheet naming exactly who is still unmarked, and in what.
+    gaps = wb.create_sheet("النواقص")
+    gaps.sheet_view.rightToLeft = True
+    gaps.column_dimensions["A"].width = 30
+    gaps.column_dimensions["B"].width = 70
+    for j, label in enumerate(["الطالب", "أدوات لم تُرصد له"], start=1):
+        c = gaps.cell(row=1, column=j, value=label)
+        c.font, c.fill, c.alignment = hdr_font, hdr_fill, centre
+    n = 2
+    for r in rows:
+        if r["missing"]:
+            gaps.cell(row=n, column=1, value=r["student"].name)
+            gaps.cell(row=n, column=2, value="، ".join(r["missing"])).alignment = (
+                Alignment(wrap_text=True))
+            n += 1
+    if n == 2:
+        gaps.cell(row=2, column=1, value="لا نواقص — كل الطلبة مرصودون في كل الأدوات").font = (
+            Font(bold=True, color="0C7266"))
+
+    return _xlsx_response(wb, f"report_{s.grade.name}_{s.name}.xlsx")
+
+
 # ── Question sheets ──
 
 Q_HEADERS = {
@@ -3225,6 +3837,8 @@ def student_me():
             "score": (round(a.score, 2) if a and a.status == "submitted" and run.show_score else None),
             "percentage": (round(a.percentage, 1) if a and a.status == "submitted" and run.show_score else None),
             "show_score": bool(run.show_score),
+            "can_review": bool(run.show_answers) and a is not None
+                          and a.status == "submitted" and not a.needs_review,
             "can_enter": phase == "open" and (a is None or a.status == "in_progress"),
         })
     return jsonify({
@@ -3342,6 +3956,53 @@ def student_run(rid):
     })
 
 
+@app.route("/api/student/runs/<int:rid>/answers")
+def student_answers(rid):
+    """What the student got right and wrong — only once the teacher allows it."""
+    st = current_student()
+    if st is None:
+        return jsonify({"error": "سجّل الدخول برقمك"}), 401
+    run = db.session.get(ExamRun, rid)
+    if run is None or run.section_id != st.section_id:
+        return jsonify({"error": "غير موجود"}), 404
+    a = ExamAttempt.query.filter_by(run_id=rid, student_id=st.id).first()
+    if a is None or a.status != "submitted":
+        return jsonify({"error": "لم تسلّم هذا الاختبار بعد"}), 409
+    if not run.show_answers:
+        return jsonify({"error": "لم يُتِح معلّمك مراجعة الإجابات لهذا الاختبار"}), 403
+    if a.needs_review:
+        return jsonify({"error": "ورقتك قيد التصحيح — راجعها بعد أن يعتمدها معلّمك"}), 409
+
+    answers = a.answers
+    out = []
+    for q in run.tool.questions:
+        got = answers.get(str(q.id)) or {}
+        given = got.get("value")
+        earned = float(got.get("points") or 0)
+        if q.qtype == "mcq":
+            given_text = q.options[int(given)] if str(given).isdigit() and int(given) < len(q.options) else None
+            right_text = q.options[int(q.correct)] if str(q.correct).isdigit() and int(q.correct) < len(q.options) else None
+        elif q.qtype == "tf":
+            given_text = None if given in (None, "") else ("صح" if str(given).lower() in ("true", "صح", "1") else "خطأ")
+            right_text = "صح" if (q.correct or "").lower() == "true" else "خطأ"
+        else:
+            given_text = given if given not in (None, "") else None
+            right_text = (q.correct or "").replace("|", " أو ") or None
+        out.append({
+            "text": q.text, "qtype": q.qtype, "points": q.points,
+            "earned": round(earned, 2),
+            "correct": earned >= (q.points or 0) and (q.points or 0) > 0,
+            "given": given_text, "answer": right_text,
+        })
+    return jsonify({
+        "tool": run.tool.name,
+        "score": a.score, "max_score": run.tool.max_score,
+        "percentage": a.percentage, "band": band_of(a.percentage),
+        "raw_points": a.raw_points, "total_points": a.total_points,
+        "questions": out,
+    })
+
+
 @app.route("/api/student/runs/<int:rid>/save", methods=["POST"])
 def student_save(rid):
     """Autosave answers mid-exam so nothing is lost if the tab closes."""
@@ -3428,12 +4089,14 @@ def ensure_columns():
     from sqlalchemy import inspect, text
     insp = inspect(db.engine)
     wanted = {
-        "user": [("term_name", "VARCHAR(120)"), ("term_start", "DATE")],
+        "user": [("term_name", "VARCHAR(120)"), ("term_start", "DATE"),
+                 ("recovery_hash", "VARCHAR(255)")],
+        "grade": [("term_id", "INTEGER")],
         "tool": [("applied_date", "DATE")],
         "score_entry": [("student_id", "INTEGER"), ("source", "VARCHAR(12)")],
         "student": [("seat_no", "INTEGER")],
         "exam_run": [("label", "VARCHAR(120)"), ("show_score", "BOOLEAN"),
-                     ("allowed_json", "TEXT")],
+                     ("allowed_json", "TEXT"), ("show_answers", "BOOLEAN")],
     }
     for table, cols in wanted.items():
         try:

@@ -38,7 +38,7 @@
 <body>
 {{ ui.loader() }}
 <div class="app">
-  {{ ui.sidenav('exams', username, school) }}
+  {{ ui.sidenav('exams', username, school, current_user.is_admin) }}
   <div class="main">
     <header class="top">
       <div><div class="crumb">أضِف أسئلة لأي أداة قياس، ثم شغّل الاختبار للشعبة في الوقت المحدّد</div><h1>الاختبارات الإلكترونية</h1></div>
@@ -141,6 +141,7 @@
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;align-items:center">
               <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500"><input type="checkbox" id="r-shuffle" checked style="width:auto;height:auto"> ترتيب الأسئلة عشوائيًا</label>
               <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500"><input type="checkbox" id="r-show" checked style="width:auto;height:auto"> إظهار الدرجة للطالب</label>
+              <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500"><input type="checkbox" id="r-ans" style="width:auto;height:auto"> السماح بمراجعة الإجابات بعد التسليم</label>
               <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500" id="absBox"><input type="checkbox" id="r-abs" style="width:auto;height:auto"> للغائبين فقط</label>
               <label style="display:flex;gap:7px;align-items:center;margin:0;font-weight:500"><input type="checkbox" id="r-pick" onchange="togglePick()" style="width:auto;height:auto"> لطلبة محدّدين فقط</label>
             </div>
@@ -233,6 +234,7 @@ async function loadTool(){
   if(!tid){el('qlist').innerHTML='';el('qEmpty').style.display='block';return;}
   const d=await fetch(`/api/tools/${tid}/questions`).then(r=>r.json());
   const qs=d.questions||[];
+  QCACHE=qs;
   el('qsum').textContent=`${qs.length} سؤال · ${d.total_points} نقطة → ${d.tool.max_score} درجة`;
   el('toolLead').innerHTML=`<b>${esc(d.tool.name)}</b> — ${esc(d.tool.kind||'')}`
     +(d.tool.lesson?` · ${esc(d.tool.lesson)}`:'')+(d.tool.week?` · أسبوع ${d.tool.week}`:'')
@@ -247,7 +249,9 @@ async function loadTool(){
     return `<div class="qrow">
       <div class="qt">${i+1}. ${esc(q.text)}</div>${body}
       <div class="meta"><span class="pill">${kind}</span><span class="pill warn">${q.points} نقطة</span>
-        <div class="spacer"></div><button class="link del" onclick="delQ(${q.id})">حذف</button></div>
+        <div class="spacer"></div>
+        <button class="link" onclick="editQ(${q.id})">تعديل</button>
+        <button class="link del" onclick="delQ(${q.id})">حذف</button></div>
     </div>`;
   }).join('');
 }
@@ -267,6 +271,36 @@ async function addQ(){
   const d=await r.json().catch(()=>({}));
   if(r.ok){el('n-text').value='';el('n-acc').value='';OPTS=['',''];drawOpts();await loadTool();toast('أُضيف السؤال');}
   else toast(d.error||'تعذّرت الإضافة',false);
+}
+let QCACHE=[];
+async function editQ(id){
+  const q=QCACHE.find(x=>x.id===id); if(!q)return;
+  const text=prompt('نص السؤال',q.text); if(text==null)return;
+  const body={text};
+  const pts=prompt('درجة السؤال (نقاط)',q.points); if(pts==null)return;
+  body.points=pts;
+  if(q.qtype==='mcq'){
+    const opts=prompt('الخيارات مفصولة بـ |',q.options.join(' | '));
+    if(opts==null)return;
+    const list=opts.split('|').map(o=>o.trim()).filter(Boolean);
+    if(list.length<2){toast('خيارين على الأقل',false);return;}
+    const n=prompt(`رقم الإجابة الصحيحة (1 إلى ${list.length})`,String(Number(q.correct)+1));
+    if(n==null)return;
+    const idx=parseInt(n,10)-1;
+    if(!(idx>=0&&idx<list.length)){toast('رقم خارج النطاق',false);return;}
+    body.options=list; body.correct=String(idx);
+  }else if(q.qtype==='tf'){
+    const a=prompt('الإجابة الصحيحة: صح أو خطأ',q.correct==='true'?'صح':'خطأ');
+    if(a==null)return;
+    body.correct=(a.trim()==='صح'||a.trim().toLowerCase()==='true')?'true':'false';
+  }else{
+    const a=prompt('الإجابات المقبولة مفصولة بـ | (فارغ = تصحيح يدوي)',q.correct||'');
+    if(a==null)return;
+    body.correct=a.trim();
+  }
+  const r=await jreq(`/api/questions/${id}`,body,'PUT');
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){await loadTool();toast('عُدّل السؤال');}else toast(d.error||'تعذّر التعديل',false);
 }
 async function delQ(id){if(!confirm('حذف هذا السؤال؟'))return;const r=await fetch(`/api/questions/${id}`,{method:'DELETE'});if(r.ok){await loadTool();toast('تم الحذف');}}
 
@@ -349,7 +383,8 @@ async function createRun(now){
   if(!now&&!start){toast('حدّد وقت البدء للجدولة',false);return;}
   const body={section_id:sec,start_at:start,end_at:toUtc(el('r-end').value),
     duration_min:el('r-dur').value||null,absentees_only:el('r-abs').checked,
-    shuffle:el('r-shuffle').checked,show_score:el('r-show').checked};
+    shuffle:el('r-shuffle').checked,show_score:el('r-show').checked,
+    show_answers:el('r-ans').checked};
   if(el('r-pick').checked){
     const chosen=PICK.filter(s=>s.on).map(s=>s.id);
     if(!chosen.length){toast('حدّد الطلبة الذين يُفتح لهم الاختبار',false);return;}
@@ -416,16 +451,22 @@ async function loadRuns(){
       <span class="pill">${r.submitted}/${r.eligible} سلّم</span>
       ${r.avg_percent!=null?`<span class="pill warn">المتوسط ${r.avg_percent}%</span>`:''}
       <button class="btn ghost xs" onclick="loadRun(${r.id})">متابعة</button>
+      ${r.show_answers?'<span class="pill">مراجعة مُتاحة</span>':''}
       ${r.phase==='open'?`<button class="btn ghost xs" onclick="act(${r.id},'extend')">+10 د</button>
         <button class="btn danger xs" onclick="act(${r.id},'close')">إغلاق</button>`
         :`<button class="btn ghost xs" onclick="act(${r.id},'reopen')">إعادة فتح</button>`}
+      <button class="btn ghost xs" onclick="act(${r.id},'answers')">${r.show_answers?'إخفاء المراجعة':'إتاحة المراجعة'}</button>
       <button class="btn danger xs" onclick="delRun(${r.id})">حذف</button>
     </div>`;
   }).join('');
 }
 async function act(rid,action){
-  const body={action};
+  let body={action};
   if(action==='extend')body.minutes=10;
+  if(action==='answers'){
+    const cur=(await fetch(`/api/runs/${rid}`).then(r=>r.json())).show_answers;
+    body={show_answers:!cur};
+  }
   const r=await jreq(`/api/runs/${rid}`,body,'PUT');
   if(r.ok){await loadRuns();if(CUR_RUN===rid)loadRun(rid);toast('تم التحديث');}else toast('تعذّر التحديث',false);
 }

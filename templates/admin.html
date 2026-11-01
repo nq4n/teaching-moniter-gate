@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مدير المدرسة — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr-shell.css') }}">
+</head>
+<body>
+{{ ui.loader() }}
+<div class="app">
+  {{ ui.sidenav('admin', username, school, current_user.is_admin) }}
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">نظرة على معلّمي المدرسة — تجميعية، بلا أسماء طلبة</div><h1>مدير المدرسة</h1></div>
+      <div class="spacer"></div><span class="toast" id="toast"></span>
+    </header>
+    <div class="body">
+      <div class="card">
+        <div class="hd"><h3>المعلّمون</h3><div class="spacer"></div><span class="pill" id="cnt">0</span></div>
+        <p class="lead">أرقام كل معلّم: صفوفه وشُعبه وطلبته المسجّلون، وكم درجة رصد، ومتوسط
+          صفوفه، وتقدّمه في تدريس المنهج. <b>لا تظهر هنا أسماء طلبة ولا درجات أفراد.</b></p>
+        <div style="overflow:auto"><table id="tbl"></table></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h3>إعادة تعيين كلمة مرور معلّم</h3></div>
+        <p class="lead">آخر حلّ لمعلّم فقد كلمة مروره <b>ورمز الاسترجاع</b> معًا. تُولَّد كلمة
+          مرور مؤقتة تُعطيها له ليغيّرها من صفحة حسابه.</p>
+        <div class="pickers" style="margin-top:14px;max-width:560px">
+          <div><label>المعلّم</label><select id="who"></select></div>
+          <div><label>كلمة مرورك أنت (للتأكيد)</label><input id="mypw" type="password"></div>
+        </div>
+        <button class="btn danger" style="margin-top:16px" onclick="reset()">إعادة التعيين</button>
+        <div id="temp"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const el=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const jreq=(p,b)=>fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+function toast(m,ok=true){const t=el('toast');t.className='toast '+(ok?'ok':'err');t.textContent=m;setTimeout(()=>t.className='toast',5000);}
+let ME=null;
+async function load(){
+  const r=await fetch('/api/admin/teachers');
+  if(!r.ok){document.querySelector('.body').innerHTML='<div class="card empty">هذه الصفحة لمدير المدرسة فقط.</div>';return;}
+  const d=await r.json();
+  el('cnt').textContent=d.teachers.length;
+  el('tbl').innerHTML=`<thead><tr><th>المعلّم</th><th>صفوف</th><th>شُعب</th><th>طلبة</th>
+    <th>أدوات</th><th>درجات مرصودة</th><th>المتوسط</th><th>الدروس</th></tr></thead><tbody>`
+    +d.teachers.map(x=>`<tr>
+      <td style="font-weight:600">${esc(x.username)}${x.is_admin?' <span class="pill">مدير</span>':''}</td>
+      <td>${x.grades}</td><td>${x.sections}</td><td>${x.students}</td><td>${x.tools}</td>
+      <td>${x.scores}</td><td>${x.average!=null?x.average+'%':'—'}</td>
+      <td class="muted">${x.lessons_taught} / ${x.lessons_total}</td></tr>`).join('')+'</tbody>';
+  el('who').innerHTML=d.teachers.filter(x=>!x.is_admin)
+    .map(x=>`<option value="${x.id}">${esc(x.username)}</option>`).join('')
+    ||'<option value="">— لا معلّمين آخرين —</option>';
+}
+async function reset(){
+  const uid=el('who').value; if(!uid){toast('اختر معلّمًا',false);return;}
+  if(!el('mypw').value){toast('أدخل كلمة مرورك للتأكيد',false);return;}
+  if(!confirm('إعادة تعيين كلمة مرور هذا المعلّم؟'))return;
+  const r=await jreq(`/api/admin/teachers/${uid}/reset-password`,{current:el('mypw').value});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast(d.error||'تعذّرت العملية',false);return;}
+  el('mypw').value='';
+  el('temp').innerHTML=`<div class="hint" style="margin-top:16px">كلمة مرور مؤقتة لـ
+    <b>${esc(d.username)}</b>: <span class="code">${esc(d.temp_password)}</span><br>
+    أعطِها له ليدخل بها ثم يغيّرها فورًا من صفحة «حسابي».</div>`;
+  toast('أُعيد التعيين');
+}
+window.__mnrManualLoader=true;
+load().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+</script>
+</body>
+</html>

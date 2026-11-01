@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>استرجاع الحساب — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr-shell.css') }}">
+<style>
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.box{max-width:470px;width:100%;background:#fff;border:1px solid #E6E8EE;border-radius:18px;padding:32px}
+h1{font-size:21px;font-weight:700;margin-bottom:7px}
+.lead{font-size:13.5px;color:#646D7E;line-height:1.9;margin-bottom:22px}
+.err{background:#FBECEC;color:#B42318;border-radius:10px;padding:11px 15px;font-size:13.5px;font-weight:600;margin-bottom:16px}
+.f{margin-bottom:14px}
+#code{direction:ltr;text-align:center;font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase}
+.foot{text-align:center;font-size:13px;color:#646D7E;margin-top:20px}
+.foot a{color:#2D5BFF;font-weight:600}
+</style>
+</head>
+<body>
+<div class="box">
+  <div style="text-align:center;margin-bottom:16px">{{ ui.beaconGradient(56,'rcv') }}</div>
+  <h1>استرجاع الحساب</h1>
+  <p class="lead">أدخل اسم المستخدم و<b>رمز الاسترجاع</b> الذي حصلت عليه عند إنشاء حسابك،
+    واختر كلمة مرور جديدة.</p>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <div class="f"><label>اسم المستخدم</label><input name="username" required autocomplete="username"></div>
+    <div class="f"><label>رمز الاسترجاع</label>
+      <input id="code" name="code" required placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off"></div>
+    <div class="f"><label>كلمة المرور الجديدة</label>
+      <input type="password" name="password" required minlength="6" autocomplete="new-password"></div>
+    <div class="f"><label>تأكيد كلمة المرور</label>
+      <input type="password" name="confirm_password" required minlength="6" autocomplete="new-password"></div>
+    <button class="btn" style="width:100%" type="submit">تعيين كلمة المرور</button>
+  </form>
+  <div class="foot">تذكّرتها؟ <a href="{{ url_for('login') }}">عودة لتسجيل الدخول</a></div>
+  <div class="foot" style="margin-top:12px;font-size:12.5px;line-height:1.9">
+    ليس لديك رمز استرجاع؟ الحسابات المُنشأة قبل إضافة هذه الميزة لا رمز لها —
+    سجّل الدخول وولّد واحدًا من صفحة «حسابي». وإن فقدت كلمة المرور أصلًا،
+    فمدير المدرسة على المنصة يستطيع إعادة تعيينها لك.
+  </div>
+</div>
+</body>
+</html>

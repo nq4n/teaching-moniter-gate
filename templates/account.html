@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+{% import 'macros.html' as ui %}
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حسابي — المنارة</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='mnr-shell.css') }}">
+<style>
+.codeout{background:#15171E;border-radius:12px;padding:18px;text-align:center;margin-top:14px;display:none}
+.codeout.on{display:block}
+.codeout .c{direction:ltr;font-family:ui-monospace,Menlo,monospace;font-size:22px;font-weight:700;color:#fff;letter-spacing:.08em}
+.codeout .k{font-size:11.5px;color:#8A93A3;margin-top:7px}
+.narrow{max-width:420px}
+</style>
+</head>
+<body>
+{{ ui.loader() }}
+<div class="app">
+  {{ ui.sidenav('account', username, school, current_user.is_admin) }}
+  <div class="main">
+    <header class="top">
+      <div><div class="crumb">كلمة المرور ورمز الاسترجاع وبيانات المدرسة</div><h1>حسابي</h1></div>
+      <div class="spacer"></div><span class="toast" id="toast"></span>
+    </header>
+    <div class="body">
+      <div class="card">
+        <div class="hd"><h3>البيانات</h3></div>
+        <div class="pickers" style="margin-top:14px">
+          <div><label>اسم المستخدم</label><input id="u" disabled></div>
+          <div><label>البريد الإلكتروني</label><input id="email" type="email"></div>
+          <div><label>المدرسة</label><input id="school"></div>
+        </div>
+        <button class="btn" style="margin-top:16px" onclick="saveInfo()">حفظ</button>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h3>تغيير كلمة المرور</h3></div>
+        <div class="narrow" style="margin-top:14px">
+          <div style="margin-bottom:12px"><label>كلمة المرور الحالية</label>
+            <input id="cur" type="password" autocomplete="current-password"></div>
+          <div style="margin-bottom:12px"><label>الجديدة (٦ أحرف فأكثر)</label>
+            <input id="new" type="password" autocomplete="new-password"></div>
+          <div><label>تأكيد الجديدة</label>
+            <input id="new2" type="password" autocomplete="new-password"></div>
+          <button class="btn" style="margin-top:16px" onclick="changePw()">تغيير كلمة المرور</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd"><h3>رمز الاسترجاع</h3><div class="spacer"></div>
+          <span class="pill" id="hasCode">—</span></div>
+        <p class="lead">به وحده تستعيد حسابك إن نسيت كلمة المرور — لا يوجد بريد إلكتروني في
+          المنصة لإرسال رابط استرجاع. توليد رمز جديد <b>يُبطل القديم فورًا</b>.</p>
+        <div class="narrow">
+          <label>أدخل كلمة مرورك الحالية للتأكيد</label>
+          <input id="rcur" type="password" autocomplete="current-password">
+          <button class="btn ghost" style="margin-top:14px" onclick="regen()">توليد رمز جديد</button>
+        </div>
+        <div class="codeout" id="out">
+          <div class="c" id="code"></div>
+          <div class="k">احفظه الآن — لن يُعرض مرة أخرى</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const el=id=>document.getElementById(id);
+const jreq=(p,b,m='POST')=>fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+function toast(m,ok=true){const t=el('toast');t.className='toast '+(ok?'ok':'err');t.textContent=m;setTimeout(()=>t.className='toast',4200);}
+
+async function load(){
+  const d=await fetch('/api/account').then(r=>r.json());
+  el('u').value=d.username; el('email').value=d.email||''; el('school').value=d.school||'';
+  el('hasCode').textContent=d.has_recovery_code?'رمز فعّال':'لا يوجد رمز — ولّد واحدًا';
+  el('hasCode').className='pill '+(d.has_recovery_code?'open':'err');
+}
+async function saveInfo(){
+  const r=await jreq('/api/account',{email:el('email').value,school:el('school').value},'PUT');
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){toast('حُفظت البيانات');}else toast(d.error||'تعذّر الحفظ',false);
+}
+async function changePw(){
+  if(!el('cur').value){toast('أدخل كلمة المرور الحالية',false);return;}
+  if(el('new').value!==el('new2').value){toast('كلمتا المرور غير متطابقتين',false);return;}
+  if(el('new').value.length<6){toast('كلمة المرور قصيرة جدًا',false);return;}
+  const r=await jreq('/api/account/password',{current:el('cur').value,new:el('new').value});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){['cur','new','new2'].forEach(i=>el(i).value='');toast('تم تغيير كلمة المرور');}
+  else toast(d.error||'تعذّر التغيير',false);
+}
+async function regen(){
+  if(!el('rcur').value){toast('أدخل كلمة مرورك للتأكيد',false);return;}
+  if(!confirm('توليد رمز جديد يُبطل الرمز القديم. متابعة؟'))return;
+  const r=await jreq('/api/account/recovery-code',{current:el('rcur').value});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok){el('rcur').value='';el('code').textContent=d.code;el('out').classList.add('on');
+    await load();toast('رمز جديد — احفظه الآن');}
+  else toast(d.error||'تعذّر التوليد',false);
+}
+window.__mnrManualLoader=true;
+load().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+</script>
+</body>
+</html>
