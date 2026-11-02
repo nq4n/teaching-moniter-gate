@@ -2367,7 +2367,12 @@ def section_students(sid):
         created.append(st)
     db.session.flush()
     # Keep the anonymous head-count in step with the roster.
-    s.student_count = max(s.student_count or 0, len(s.students))
+    # Once a section has a named roster, the roster IS the count. Keeping the
+    # larger of the two would leave a setup placeholder (say 25) standing over
+    # a real class of 20, and every "expected marks" figure would be inflated.
+    # Counted with a query, not len(s.students): that collection was loaded
+    # earlier in this request and does not include the rows just added.
+    s.student_count = Student.query.filter_by(section_id=sid).count()
     db.session.commit()
     return jsonify({"added": len(created), "students": [_student_json(x) for x in created]}), 201
 
@@ -2384,7 +2389,7 @@ def student_detail(stid):
         sec = st.section
         db.session.delete(st)
         db.session.flush()
-        sec.student_count = max(len(sec.students), 0)
+        sec.student_count = Student.query.filter_by(section_id=sec.id).count()
         db.session.commit()
         return "", 204
     data = request.get_json(force=True) or {}
@@ -3152,7 +3157,12 @@ def import_students(sid):
         db.session.add(st)
         created.append(st)
     db.session.flush()
-    s.student_count = max(s.student_count or 0, len(s.students))
+    # Once a section has a named roster, the roster IS the count. Keeping the
+    # larger of the two would leave a setup placeholder (say 25) standing over
+    # a real class of 20, and every "expected marks" figure would be inflated.
+    # Counted with a query, not len(s.students): that collection was loaded
+    # earlier in this request and does not include the rows just added.
+    s.student_count = Student.query.filter_by(section_id=sid).count()
     db.session.commit()
     result["added"] = len(created)
     result["students"] = [_student_json(x) for x in created]

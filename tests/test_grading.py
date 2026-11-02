@@ -120,3 +120,22 @@ assert t.get(f"/api/sections/{sec['id']}/tools/{og['tools'][0]['id']}"
 print(" cross-teacher and cross-grade both 403 ✓")
 
 print("\n✅ test_grading passed")
+
+section("a setup placeholder count gives way to the real roster")
+s3 = ok(t.post(f"/api/grades/{g['id']}/sections",
+               json={"name": "شعبة بعدّاد مبدئي", "student_count": 25}), "sec3")
+assert ok(t.get(f"/api/sections/{s3['id']}/students"), "r0")["section"]["student_count"] == 25
+ok(t.post(f"/api/sections/{s3['id']}/students",
+          json={"names": "أول\nثاني\nثالث"}), "add3")
+d3 = ok(t.get(f"/api/sections/{s3['id']}/students"), "r1")
+assert d3["section"]["student_count"] == 3, d3["section"]["student_count"]
+print(f" placeholder 25 → {d3['section']['student_count']} after registering 3 ✓")
+
+ok(t.post(f"/api/sections/{s3['id']}/students", json={"names": "رابع"}), "add4")
+d3 = ok(t.get(f"/api/sections/{s3['id']}/students"), "r2")
+assert d3["section"]["student_count"] == 4
+st_id = d3["students"][0]["id"]
+ok(t.delete(f"/api/students/{st_id}"), "del", want=(204,))
+d3 = ok(t.get(f"/api/sections/{s3['id']}/students"), "r3")
+assert d3["section"]["student_count"] == 3, d3["section"]["student_count"]
+print(f" tracks adds and deletes: {d3['section']['student_count']} ✓")
