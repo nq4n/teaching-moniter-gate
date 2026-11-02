@@ -11,9 +11,28 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def boot(name):
-    """Point the app at a fresh database, import it, and hand back a client."""
-    db = os.path.join(tempfile.mkdtemp(prefix=f"manarah-{name}-"), f"{name}.db")
-    os.environ["DATABASE_URL"] = f"sqlite:///{db}"
+    """Point the app at a fresh database, import it, and hand back a client.
+
+    Defaults to a throw-away SQLite file. Set TEST_PG_URL to a Postgres server
+    to run the same suite against the engine production actually uses — each
+    file gets its own schema there, so the suites do not collide.
+    """
+    pg = os.environ.get("TEST_PG_URL")
+    if pg:
+        import uuid
+        schema = f"t_{name}_{uuid.uuid4().hex[:8]}"
+        import psycopg2
+        conn = psycopg2.connect(pg)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(f'CREATE SCHEMA "{schema}"')
+        conn.close()
+        sep = "&" if "?" in pg else "?"
+        os.environ["DATABASE_URL"] = f"{pg}{sep}options=-csearch_path%3D{schema}"
+        db = f"{pg} [{schema}]"
+    else:
+        db = os.path.join(tempfile.mkdtemp(prefix=f"manarah-{name}-"), f"{name}.db")
+        os.environ["DATABASE_URL"] = f"sqlite:///{db}"
     os.environ["SECRET_KEY"] = "test-key"
     os.environ.pop("ADMIN_USERNAME", None)
     os.environ.pop("ADMIN_PASSWORD", None)
