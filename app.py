@@ -10,7 +10,7 @@ measurement tools (أدوات القياس).
 
 from flask import (
     Flask, render_template, request, jsonify, redirect, url_for, send_file,
-    session,
+    session, g,
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -327,6 +327,24 @@ class ExamAttempt(db.Model):
             return v if isinstance(v, dict) else {}
         except (ValueError, TypeError):
             return {}
+
+
+class ApiToken(db.Model):
+    """مفتاح وصول — lets an agent or script act for this teacher via the API."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    name = db.Column(db.String(80), nullable=False, default="مفتاح وصول")
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    preview = db.Column(db.String(32))          # mnr_abcd…wxyz, for the list
+    scope = db.Column(db.String(10), default="read")   # read / write
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime)
+    last_used_at = db.Column(db.DateTime)
+    uses = db.Column(db.Integer, default=0)
+    revoked_at = db.Column(db.DateTime)
+
+    user = db.relationship("User", backref=db.backref("api_tokens",
+                                                      cascade="all, delete-orphan"))
 
 
 @login_manager.user_loader
@@ -725,6 +743,199 @@ def _clone_structure(src, dst):
                 db.session.flush()
         n += 1
     return n
+
+
+# ─────────────────────────────────────────────────────────────
+# API access tokens
+#
+# Lets an agent or script act for a teacher through the platform's own API,
+# which matters because the alternative — writing to the database directly —
+# bypasses every rule the app enforces: unique student numbers, duplicate
+# detection, roster counts, score scaling. A token goes through the same code
+# the web pages do.
+#
+# The token is shown once and stored only as a hash. It carries a scope, an
+# expiry, and a record of when it was last used, and it can be revoked. A token
+# can never mint another token or change the account's password: those need a
+# real sign-in, so a leaked token cannot entrench itself.
+# ─────────────────────────────────────────────────────────────
+
+TOKEN_PREFIX = "mnr_"
+TOKEN_SCOPES = ("read", "write")
+SESSION_ONLY_ENDPOINTS = {
+    "list_tokens", "create_token", "token_detail",
+    "change_password", "regen_recovery_code", "account_api",
+    "admin_issue_recovery_code",
+}
+
+
+def gen_api_token():
+    return TOKEN_PREFIX + secrets.token_urlsafe(32)
+
+
+def _token_fingerprint(raw):
+    """A lookup key for the token. Hashing the secret with the app key rather
+    than storing it means the table alone cannot be replayed against the API."""
+    key = app.config["SECRET_KEY"].encode()
+    return hashlib.sha256(key + raw.encode()).hexdigest()
+
+
+@login_manager.request_loader
+def load_user_from_token(request):
+    """Authenticate `Authorization: Bearer mnr_…` when there is no session."""
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return None
+    raw = header[7:].strip()
+    if not raw.startswith(TOKEN_PREFIX):
+        return None
+    tok = ApiToken.query.filter_by(token_hash=_token_fingerprint(raw)).first()
+    if tok is None or tok.revoked_at is not None:
+        return None
+    if tok.expires_at and tok.expires_at < datetime.utcnow():
+        return None
+    # Request-scoped: `g` is per request and per thread, so two requests served
+    # at once never see each other's token.
+    g.api_token_id = tok.id
+    return db.session.get(User, tok.user_id)
+
+
+def request_token():
+    """The token that authenticated this request, or None for a real session."""
+    tid = getattr(g, "api_token_id", None)
+    return db.session.get(ApiToken, tid) if tid else None
+
+
+@app.after_request
+def _stamp_token_usage(response):
+    """Record the use. Incremented in SQL, not read-modify-write in Python:
+    parallel calls on one token would otherwise overwrite each other's count."""
+    tid = getattr(g, "api_token_id", None)
+    if tid:
+        try:
+            ApiToken.query.filter_by(id=tid).update(
+                {"uses": ApiToken.uses + 1, "last_used_at": datetime.utcnow()},
+                synchronize_session=False)
+            db.session.commit()
+        except Exception:                      # noqa: BLE001 - never break a response
+            db.session.rollback()
+    return response
+
+
+@app.before_request
+def _enforce_token_scope():
+    """A read token may only read, and no token may touch credentials.
+
+    Flask-Login resolves the request loader lazily, the first time anyone looks
+    at current_user — which is inside the view, after before_request handlers
+    have run. Touching it here forces that to happen now, so the scope is
+    checked before the view can act. Without this the check silently never
+    fired and a read token could write.
+    """
+    _ = current_user.is_authenticated
+    tok = request_token()
+    if tok is None:
+        return None
+    if request.endpoint in SESSION_ONLY_ENDPOINTS:
+        return jsonify({
+            "error": "هذه العملية تحتاج تسجيل دخول حقيقي، ولا تصلح بمفتاح وصول"
+        }), 403
+    if tok.scope == "read" and request.method not in ("GET", "HEAD", "OPTIONS"):
+        return jsonify({
+            "error": "هذا المفتاح للقراءة فقط", "scope": tok.scope
+        }), 403
+    return None
+
+
+def _token_json(t, raw=None):
+    d = {
+        "id": t.id, "name": t.name, "scope": t.scope,
+        "created_at": iso_dt(t.created_at),
+        "expires_at": iso_dt(t.expires_at),
+        "last_used_at": iso_dt(t.last_used_at),
+        "uses": t.uses or 0,
+        "revoked": t.revoked_at is not None,
+        "expired": bool(t.expires_at and t.expires_at < datetime.utcnow()),
+        "preview": t.preview,
+    }
+    if raw:
+        d["token"] = raw
+    return d
+
+
+@app.route("/api/tokens", methods=["GET", "POST"])
+@login_required
+def list_tokens():
+    if request.method == "POST":
+        return create_token()
+    return jsonify({"tokens": [
+        _token_json(t) for t in
+        ApiToken.query.filter_by(user_id=current_user.id)
+        .order_by(ApiToken.id.desc()).all()
+    ]})
+
+
+def create_token():
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()[:80] or "مفتاح وصول"
+    scope = data.get("scope") if data.get("scope") in TOKEN_SCOPES else "read"
+    try:
+        days = int(data.get("days") or 90)
+    except (TypeError, ValueError):
+        days = 90
+    days = max(1, min(days, 365))
+
+    live = ApiToken.query.filter_by(user_id=current_user.id, revoked_at=None).count()
+    if live >= 10:
+        return jsonify({"error": "لديك ١٠ مفاتيح فعّالة — ألغِ واحدًا قبل إصدار جديد"}), 409
+
+    raw = gen_api_token()
+    tok = ApiToken(
+        user_id=current_user.id, name=name, scope=scope,
+        token_hash=_token_fingerprint(raw),
+        preview=raw[:len(TOKEN_PREFIX) + 4] + "…" + raw[-4:],
+        expires_at=datetime.utcnow() + timedelta(days=days),
+    )
+    db.session.add(tok)
+    db.session.commit()
+    # The only time the secret exists outside the caller's hands.
+    return jsonify(_token_json(tok, raw=raw)), 201
+
+
+@app.route("/api/tokens/<int:tid>", methods=["DELETE"])
+@login_required
+def token_detail(tid):
+    tok = db.session.get(ApiToken, tid)
+    if tok is None or tok.user_id != current_user.id:
+        return jsonify({"error": "غير موجود"}), 404
+    tok.revoked_at = datetime.utcnow()
+    db.session.commit()
+    return "", 204
+
+
+@app.route("/api/whoami")
+@login_required
+def whoami():
+    """What this credential can do — the first call an agent should make."""
+    tok = request_token()
+    t = active_term()
+    return jsonify({
+        "username": current_user.username,
+        "school": current_user.school,
+        "is_admin": bool(current_user.is_admin),
+        "auth": "token" if tok else "session",
+        "scope": (tok.scope if tok else "write"),
+        "token_name": (tok.name if tok else None),
+        "token_expires_at": (iso_dt(tok.expires_at) if tok else None),
+        "active_term": {"id": t.id, "name": t.name, "start_date": iso(t.start_date)},
+        "grades": [
+            {"id": gr.id, "name": gr.name, "level": gr.level,
+             "sections": [{"id": s.id, "name": s.name,
+                           "students": len(s.students)} for s in gr.sections],
+             "tools": len(gr.tools)}
+            for gr in _grades_for_user()
+        ],
+    })
 
 
 # ─────────────────────────────────────────────────────────────
@@ -4214,6 +4425,7 @@ def ensure_columns():
     wanted = {
         "user": [("term_name", "VARCHAR(120)"), ("term_start", "DATE"),
                  ("recovery_hash", "VARCHAR(255)")],
+        "api_token": [("uses", "INTEGER")],
         "grade": [("term_id", "INTEGER")],
         "question": [("image_url", "VARCHAR(500)")],
         "exam_attempt": [("focus_losses", "INTEGER")],

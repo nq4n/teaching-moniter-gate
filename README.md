@@ -151,6 +151,18 @@ source, and a teacher edit overrides the automatic mark.
 - Deletes state exactly what they would destroy; a grade holding marks needs its
   name typed to confirm
 
+### 🔌 Connect an agent or a script
+Issue an API token from the account page and a program can register students,
+build papers and record marks on a teacher's behalf — **through the platform's
+own API**, so unique student numbers, duplicate detection, roster counts and
+score scaling all still apply. Writing to the database directly bypasses every
+one of them.
+
+Tokens are scoped (read / read-write), expire, are stored hashed, shown once,
+revocable instantly, and capped at ten. No token can ever mint another token or
+change the account's password, recovery code or email — those need a real
+sign-in, so a leaked token cannot entrench itself.
+
 **👉 Full guide (Arabic): [EXAMS.md](EXAMS.md)**
 
 

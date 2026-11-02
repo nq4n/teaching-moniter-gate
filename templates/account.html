@@ -13,6 +13,8 @@
 .codeout .c{direction:ltr;font-family:ui-monospace,Menlo,monospace;font-size:22px;font-weight:700;color:#fff;letter-spacing:.08em}
 .codeout .k{font-size:11.5px;color:#8A93A3;margin-top:7px}
 .narrow{max-width:420px}
+.linkbtn{background:none;border:none;color:#2D5BFF;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px}
+.linkbtn.del{color:#B42318}
 </style>
 </head>
 <body>
@@ -63,6 +65,35 @@
           <div class="k">احفظه الآن — لن يُعرض مرة أخرى</div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="hd"><h3>مفاتيح الوصول (API)</h3><div class="spacer"></div>
+          <span class="pill" id="tkCount">0</span></div>
+        <p class="lead">تتيح لبرنامج أو مساعد ذكي أن يعمل نيابةً عنك <b>عبر المنصة نفسها</b> —
+          فتسري عليه كل قواعدها: توليد أرقام الطلبة، كشف المكرّر، تحديث العدّادات، وحساب
+          الدرجات. المفتاح يصل إلى بيانات صفوفك وطلبتك بأسمائهم، فأصدره لمن تثق به فقط،
+          وألغِه فور انتهاء الحاجة.</p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+          <div><label>الاسم (لتعرفه لاحقًا)</label><input id="tkName" placeholder="مثلًا: كلود"></div>
+          <div><label>الصلاحية</label>
+            <select id="tkScope">
+              <option value="read">قراءة فقط</option>
+              <option value="write">قراءة وكتابة</option>
+            </select></div>
+          <div><label>مدّة الصلاحية (يوم)</label><input type="number" id="tkDays" value="30" min="1" max="365"></div>
+        </div>
+        <button class="btn" style="margin-top:16px" onclick="newToken()">إصدار مفتاح</button>
+
+        <div class="codeout" id="tkOut">
+          <div class="c" id="tkVal" style="font-size:15px;word-break:break-all"></div>
+          <div class="k">انسخه الآن — لن يُعرض مرة أخرى</div>
+          <button class="btn ghost sm" style="margin-top:12px" onclick="copyTk()">نسخ</button>
+        </div>
+
+        <div style="overflow:auto;margin-top:18px"><table id="tkTable"></table></div>
+        <div class="empty" id="tkEmpty">لا مفاتيح — المنصة لا تقبل أي وصول خارجي حاليًا.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -100,8 +131,58 @@ async function regen(){
     await load();toast('رمز جديد — احفظه الآن');}
   else toast(d.error||'تعذّر التوليد',false);
 }
+/* ── access tokens ── */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=iso=>iso?new Date(iso).toLocaleString('ar',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+let LASTTK='';
+
+async function loadTokens(){
+  const d=await fetch('/api/tokens').then(r=>r.json()).catch(()=>({tokens:[]}));
+  const ts=d.tokens||[];
+  const live=ts.filter(x=>!x.revoked&&!x.expired);
+  el('tkCount').textContent=`${live.length} فعّال`;
+  el('tkCount').className='pill '+(live.length?'open':'');
+  el('tkEmpty').style.display=ts.length?'none':'block';
+  el('tkTable').innerHTML=ts.length?`<thead><tr><th>الاسم</th><th>المفتاح</th><th>الصلاحية</th>
+      <th>الحالة</th><th>ينتهي</th><th>آخر استخدام</th><th>مرات</th><th></th></tr></thead><tbody>`
+    +ts.map(x=>{
+      const state=x.revoked?['closed','مُلغى']:x.expired?['warn','منتهٍ']:['open','فعّال'];
+      return `<tr style="${x.revoked||x.expired?'opacity:.55':''}">
+        <td style="font-weight:600">${esc(x.name)}</td>
+        <td><span class="code">${esc(x.preview||'—')}</span></td>
+        <td><span class="pill">${x.scope==='write'?'قراءة وكتابة':'قراءة فقط'}</span></td>
+        <td><span class="pill ${state[0]}">${state[1]}</span></td>
+        <td class="muted">${fmt(x.expires_at)}</td>
+        <td class="muted">${fmt(x.last_used_at)}</td>
+        <td class="muted">${x.uses}</td>
+        <td>${x.revoked?'':`<button class="linkbtn del" onclick="revoke(${x.id},'${esc(x.name).replace(/'/g,"\\'")}')">إلغاء</button>`}</td>
+      </tr>`;}).join('')+'</tbody>':'';
+}
+async function newToken(){
+  const body={name:el('tkName').value.trim(),scope:el('tkScope').value,days:el('tkDays').value||30};
+  if(body.scope==='write'&&!confirm('مفتاح «قراءة وكتابة» يستطيع إضافة الطلبة والدرجات وحذفها نيابةً عنك. متابعة؟'))return;
+  const r=await jreq('/api/tokens',body);
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast(d.error||'تعذّر الإصدار',false);return;}
+  LASTTK=d.token;
+  el('tkVal').textContent=d.token;
+  el('tkOut').classList.add('on');
+  el('tkName').value='';
+  await loadTokens();
+  toast('صدر المفتاح — انسخه الآن');
+}
+async function copyTk(){
+  try{await navigator.clipboard.writeText(LASTTK);toast('نُسخ المفتاح');}
+  catch(e){toast('حدّد المفتاح وانسخه يدويًا',false);}
+}
+async function revoke(id,name){
+  if(!confirm(`إلغاء المفتاح «${name}»؟ سيتوقف أي برنامج يستخدمه فورًا.`))return;
+  const r=await fetch(`/api/tokens/${id}`,{method:'DELETE'});
+  if(r.ok){await loadTokens();toast('أُلغي المفتاح');}else toast('تعذّر الإلغاء',false);
+}
+
 window.__mnrManualLoader=true;
-load().finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
+Promise.all([load(),loadTokens()]).finally(()=>window.__mnrHideLoader&&window.__mnrHideLoader());
 </script>
 </body>
 </html>
